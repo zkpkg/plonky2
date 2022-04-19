@@ -1,4 +1,5 @@
 use std::borrow::Borrow;
+use itertools::Itertools;
 
 use plonky2_field::extension_field::{Extendable, FieldExtension};
 use plonky2_field::field_types::Field;
@@ -178,17 +179,18 @@ impl<const D: usize> ReducingFactorTarget<D> {
     /// Reduces a vector of `ExtensionTarget`s using `ReducingExtensionGate`s.
     pub fn reduce<F>(
         &mut self,
-        terms: &[ExtensionTarget<D>], // Could probably work with a `DoubleEndedIterator` too.
+        terms: impl IntoIterator<Item = impl Borrow<ExtensionTarget<D>>>,
         builder: &mut CircuitBuilder<F, D>,
     ) -> ExtensionTarget<D>
     where
         F: RichField + Extendable<D>,
     {
+        let terms = terms.into_iter().map(|x| *x.borrow()).collect_vec();
         let l = terms.len();
 
         // For small reductions, use an arithmetic gate.
         if l <= ArithmeticExtensionGate::<D>::new_from_config(&builder.config).num_ops + 1 {
-            return self.reduce_arithmetic(terms, builder);
+            return self.reduce_arithmetic(&terms, builder);
         }
 
         let max_coeffs_len = ReducingExtensionGate::<D>::max_coeffs_len(
@@ -198,7 +200,7 @@ impl<const D: usize> ReducingFactorTarget<D> {
         self.count += l as u64;
         let zero_ext = builder.zero_extension();
         let mut acc = zero_ext;
-        let mut reversed_terms = terms.to_vec();
+        let mut reversed_terms = terms;
         while reversed_terms.len() % max_coeffs_len != 0 {
             reversed_terms.push(zero_ext);
         }

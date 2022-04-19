@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use plonky2_field::extension_field::Extendable;
 use plonky2_field::field_types::Field;
 use plonky2_field::packed_field::PackedField;
@@ -140,7 +141,7 @@ where
 
 pub fn reduce_with_powers_ext_recursive<F: RichField + Extendable<D>, const D: usize>(
     builder: &mut CircuitBuilder<F, D>,
-    terms: &[ExtensionTarget<D>],
+    terms: impl IntoIterator<Item = impl Borrow<ExtensionTarget<D>>>,
     alpha: Target,
 ) -> ExtensionTarget<D> {
     let alpha = builder.convert_to_ext(alpha);
