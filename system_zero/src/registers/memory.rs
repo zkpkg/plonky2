@@ -14,7 +14,9 @@ pub(crate) const SORTED_MEMORY_VALUE: usize = SORTED_MEMORY_ADDR_VIRTUAL + 1;
 pub(crate) const SORTED_MEMORY_READ_OR_WRITE: usize = SORTED_MEMORY_VALUE + 1;
 pub(crate) const SORTED_MEMORY_TIMESTAMP: usize = SORTED_MEMORY_READ_OR_WRITE + 1;
 
-pub(crate) const MEMORY_TRACE: usize = SORTED_MEMORY_TIMESTAMP + 1;
-pub(crate) const MEMORY_CURRENT: usize = MEMORY_TRACE + 1;
+pub(crate) const MEMORY_TRACE_CONTEXT: usize = SORTED_MEMORY_TIMESTAMP + 1;
+pub(crate) const MEMORY_TRACE_SEGMENT: usize = MEMORY_TRACE_CONTEXT + 1;
+pub(crate) const MEMORY_TRACE_VIRTUAL: usize = MEMORY_TRACE_SEGMENT + 1;
+pub(crate) const MEMORY_CURRENT: usize = MEMORY_TRACE_VIRTUAL + 1;
 
 pub(super) const END: usize = MEMORY_CURRENT + 1;
