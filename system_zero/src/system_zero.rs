@@ -25,7 +25,7 @@ use crate::permutation_unit::{
     eval_permutation_unit, eval_permutation_unit_recursively, generate_permutation_unit,
 };
 use crate::public_input_layout::NUM_PUBLIC_INPUTS;
-use crate::registers::{lookup, NUM_COLUMNS};
+use crate::registers::{lookup, memory, NUM_COLUMNS};
 
 /// We require at least 2^16 rows as it helps support efficient 16-bit range checks.
 const MIN_TRACE_ROWS: usize = 1 << 16;
@@ -166,7 +166,16 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for SystemZero<F,
             ));
         }
 
-        // TODO: Add permutation pairs for memory.
+        pairs.push(PermutationPair {
+            column_pairs: vec![(
+                memory::MEMORY_ADDR_CONTEXT, memory::SORTED_MEMORY_ADDR_CONTEXT,
+                memory::MEMORY_ADDR_SEGMENT, memory::SORTED_MEMORY_ADDR_SEGMENT,
+                memory::MEMORY_ADDR_VIRTUAL, memory::SORTED_MEMORY_ADDR_VIRTUAL,
+                memory::MEMORY_VALUE, memory::SORTED_MEMORY_VALUE,
+                memory::MEMORY_READ_OR_WRITE, memory::SORTED_MEMORY_READ_OR_WRITE,
+                memory::MEMORY_TIMESTAMP, memory::SORTED_MEMORY_TIMESTAMP,
+            )]
+        });
 
         pairs
     }

@@ -18,4 +18,6 @@ pub mod vars;
 pub mod verifier;
 
 #[cfg(test)]
+pub mod factorial_stark;
 pub mod fibonacci_stark;
+// pub mod sorting_stark;
