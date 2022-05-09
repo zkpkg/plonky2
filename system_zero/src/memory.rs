@@ -44,6 +44,8 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     let trace_context = vars.local_values[MEMORY_TRACE_CONTEXT];
     let trace_segment = vars.local_values[MEMORY_TRACE_SEGMENT];
     let trace_virtual = vars.local_values[MEMORY_TRACE_VIRTUAL];
+    let two_traces_combined = vars.local_values[MEMORY_TWO_TRACES_COMBINED];
+    let all_traces_combined = vars.local_values[MEMORY_ALL_TRACES_COMBINED];
 
     let current = vars.local_values[MEMORY_CURRENT];
     let next_current = vars.next_values[MEMORY_CURRENT];
@@ -76,14 +78,14 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
             - (F::ONE - trace_virtual) * (next_addr_virtual - addr_virtual - F::ONE),
     );
 
+    // Helper constraints to get the product of (1 - trace_context), (1 - trace_segment), and (1 - trace_virtual).
+    yield_constr.constraint(two_traces_combined - (F::ONE - trace_context) * (F::ONE - trace_segment));
+    yield_constr.constraint(all_traces_combined - two_traces_combined * (F::ONE - trace_virtual));
+
     // Enumerate purportedly-ordered log using current value c.
     yield_constr.constraint_first_row(current);
     yield_constr.constraint(current - from);
-    yield_constr.constraint(
-        next_current
-            - (F::ONE - trace_context) * (F::ONE - trace_segment) * (F::ONE - trace_virtual) * to,
-    );
-    // TODO: redo trace columns to fix this high-degree constraint ^
+    yield_constr.constraint(next_current - all_traces_combined * to);
 }
 
 pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usize>(
