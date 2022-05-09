@@ -74,9 +74,12 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     yield_constr.constraint(trace_segment * (next_addr_segment - addr_segment));
     yield_constr.constraint(trace_virtual * (next_addr_virtual - addr_virtual));
 
-    let context_range_check = vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(0)];
-    let segment_range_check = vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(1)];
-    let virtual_range_check = vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(2)];
+    let context_range_check =
+        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(0)];
+    let segment_range_check =
+        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(1)];
+    let virtual_range_check =
+        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(2)];
 
     // Third set of ordering constraints: range-check difference in the column that should be increasing.
     yield_constr.constraint(
@@ -96,8 +99,7 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     );
 
     // Helper constraints to get the product of (1 - trace_context), (1 - trace_segment), and (1 - trace_virtual).
-    yield_constr
-        .constraint(two_traces_combined - not_trace_context * not_trace_segment);
+    yield_constr.constraint(two_traces_combined - not_trace_context * not_trace_segment);
     yield_constr.constraint(all_traces_combined - two_traces_combined * not_trace_virtual);
 
     // Enumerate purportedly-ordered log using current value c.
@@ -159,38 +161,51 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
     yield_constr.constraint(builder, cond_segment_diff);
     let cond_virtual_diff = builder.mul_extension(trace_virtual, addr_virtual_diff);
     yield_constr.constraint(builder, cond_virtual_diff);
-    
-    let context_range_check = vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(0)];
-    let segment_range_check = vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(1)];
-    let virtual_range_check = vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(2)];
+
+    let context_range_check =
+        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(0)];
+    let segment_range_check =
+        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(1)];
+    let virtual_range_check =
+        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(2)];
 
     // Third set of ordering constraints: range-check difference in the column that should be increasing.
     let diff_if_context_equal = builder.mul_extension(trace_context, addr_segment_diff);
     let addr_context_diff_min_one = builder.sub_extension(addr_context_diff, one);
-    let diff_if_context_unequal = builder.mul_extension(not_trace_context, addr_context_diff_min_one);
-    let sum_of_diffs_context = builder.add_extension(diff_if_context_equal, diff_if_context_unequal);
-    let context_range_check_constraint = builder.sub_extension(context_range_check, sum_of_diffs_context);
+    let diff_if_context_unequal =
+        builder.mul_extension(not_trace_context, addr_context_diff_min_one);
+    let sum_of_diffs_context =
+        builder.add_extension(diff_if_context_equal, diff_if_context_unequal);
+    let context_range_check_constraint =
+        builder.sub_extension(context_range_check, sum_of_diffs_context);
     yield_constr.constraint(builder, context_range_check_constraint);
 
     let diff_if_segment_equal = builder.mul_extension(trace_segment, addr_virtual_diff);
     let addr_segment_diff_min_one = builder.sub_extension(addr_segment_diff, one);
-    let diff_if_segment_unequal = builder.mul_extension(not_trace_segment, addr_segment_diff_min_one);
-    let sum_of_diffs_segment = builder.add_extension(diff_if_segment_equal, diff_if_segment_unequal);
-    let segment_range_check_constraint = builder.sub_extension(segment_range_check, sum_of_diffs_segment);
+    let diff_if_segment_unequal =
+        builder.mul_extension(not_trace_segment, addr_segment_diff_min_one);
+    let sum_of_diffs_segment =
+        builder.add_extension(diff_if_segment_equal, diff_if_segment_unequal);
+    let segment_range_check_constraint =
+        builder.sub_extension(segment_range_check, sum_of_diffs_segment);
     yield_constr.constraint(builder, segment_range_check_constraint);
 
     let diff_if_virtual_equal = builder.mul_extension(trace_virtual, timestamp_diff);
     let addr_virtual_diff_min_one = builder.sub_extension(addr_virtual_diff, one);
-    let diff_if_virtual_unequal = builder.mul_extension(not_trace_virtual, addr_virtual_diff_min_one);
-    let sum_of_diffs_virtual = builder.add_extension(diff_if_virtual_equal, diff_if_virtual_unequal);
-    let virtual_range_check_constraint = builder.sub_extension(virtual_range_check, sum_of_diffs_virtual);
+    let diff_if_virtual_unequal =
+        builder.mul_extension(not_trace_virtual, addr_virtual_diff_min_one);
+    let sum_of_diffs_virtual =
+        builder.add_extension(diff_if_virtual_equal, diff_if_virtual_unequal);
+    let virtual_range_check_constraint =
+        builder.sub_extension(virtual_range_check, sum_of_diffs_virtual);
     yield_constr.constraint(builder, virtual_range_check_constraint);
 
     // Helper constraints to get the product of (1 - trace_context), (1 - trace_segment), and (1 - trace_virtual).
     let expected_two_traces_combined = builder.mul_extension(not_trace_context, not_trace_segment);
     let two_traces_diff = builder.sub_extension(two_traces_combined, expected_two_traces_combined);
     yield_constr.constraint(builder, two_traces_diff);
-    let expected_all_traces_combined = builder.mul_extension(expected_two_traces_combined, not_trace_virtual);
+    let expected_all_traces_combined =
+        builder.mul_extension(expected_two_traces_combined, not_trace_virtual);
     let all_traces_diff = builder.sub_extension(all_traces_combined, expected_all_traces_combined);
     yield_constr.constraint(builder, all_traces_diff);
 
