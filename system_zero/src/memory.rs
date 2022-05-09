@@ -1,4 +1,10 @@
-use starky::vars::StarkEvaluationTargets;
+use plonky2::field::extension_field::Extendable;
+use plonky2::field::field_types::Field;
+use plonky2::field::packed_field::PackedField;
+use plonky2::hash::hash_types::RichField;
+use plonky2::plonk::circuit_builder::CircuitBuilder;
+use starky::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
+use starky::vars::{StarkEvaluationTargets, StarkEvaluationVars};
 
 use crate::public_input_layout::NUM_PUBLIC_INPUTS;
 use crate::registers::memory::*;
@@ -62,9 +68,9 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     yield_constr.constraint(trace_segment * (next_addr_segment - addr_segment));
     yield_constr.constraint(trace_virtual * (next_addr_virtual - addr_virtual));
 
-    let context_range_check = vars.local_values[super::range_check_degree::col_rc_16_input(0)];
-    let segment_range_check = vars.local_values[super::range_check_degree::col_rc_16_input(1)];
-    let virtual_range_check = vars.local_values[super::range_check_degree::col_rc_16_input(2)];
+    let context_range_check = vars.local_values[super::registers::range_check_degree::col_rc_degree_input(0)];
+    let segment_range_check = vars.local_values[super::registers::range_check_degree::col_rc_degree_input(1)];
+    let virtual_range_check = vars.local_values[super::registers::range_check_degree::col_rc_degree_input(2)];
 
     // Third set of ordering constraints: range-check difference in the column that should be increasing.
     yield_constr.constraint(
@@ -95,8 +101,9 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
 }
 
 pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usize>(
+    builder: &mut CircuitBuilder<F, D>,
     vars: StarkEvaluationTargets<D, NUM_COLUMNS, NUM_PUBLIC_INPUTS>,
-    yield_constr: &mut ConstraintConsumer<P>,
+    yield_constr: &mut RecursiveConstraintConsumer<F, D>,
 ) {
     let one = builder.one_extension();
 
