@@ -168,18 +168,21 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for SystemZero<F,
 
         pairs.push(PermutationPair {
             column_pairs: vec![(
-                (memory::MEMORY_ADDR_CONTEXT,
-                memory::SORTED_MEMORY_ADDR_CONTEXT),
-                (memory::MEMORY_ADDR_SEGMENT,
-                memory::SORTED_MEMORY_ADDR_SEGMENT),
-                (memory::MEMORY_ADDR_VIRTUAL,
-                memory::SORTED_MEMORY_ADDR_VIRTUAL),
-                (memory::MEMORY_FROM,
-                memory::SORTED_MEMORY_FROM),
-                (memory::MEMORY_TO,
-                memory::SORTED_MEMORY_TO),
-                (memory::MEMORY_TIMESTAMP,
-                memory::SORTED_MEMORY_TIMESTAMP),
+                (
+                    memory::MEMORY_ADDR_CONTEXT,
+                    memory::SORTED_MEMORY_ADDR_CONTEXT,
+                ),
+                (
+                    memory::MEMORY_ADDR_SEGMENT,
+                    memory::SORTED_MEMORY_ADDR_SEGMENT,
+                ),
+                (
+                    memory::MEMORY_ADDR_VIRTUAL,
+                    memory::SORTED_MEMORY_ADDR_VIRTUAL,
+                ),
+                (memory::MEMORY_FROM, memory::SORTED_MEMORY_FROM),
+                (memory::MEMORY_TO, memory::SORTED_MEMORY_TO),
+                (memory::MEMORY_TIMESTAMP, memory::SORTED_MEMORY_TIMESTAMP),
             )],
         });
 

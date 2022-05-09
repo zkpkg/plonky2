@@ -79,7 +79,8 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     );
 
     // Helper constraints to get the product of (1 - trace_context), (1 - trace_segment), and (1 - trace_virtual).
-    yield_constr.constraint(two_traces_combined - (F::ONE - trace_context) * (F::ONE - trace_segment));
+    yield_constr
+        .constraint(two_traces_combined - (F::ONE - trace_context) * (F::ONE - trace_segment));
     yield_constr.constraint(all_traces_combined - two_traces_combined * (F::ONE - trace_virtual));
 
     // Enumerate purportedly-ordered log using current value c.
