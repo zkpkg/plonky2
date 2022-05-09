@@ -50,10 +50,12 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     let current = vars.local_values[MEMORY_CURRENT];
     let next_current = vars.next_values[MEMORY_CURRENT];
 
+    // First set of ordering constraint: traces are boolean.
     yield_constr.constraint(trace_context * (F::ONE - trace_context));
     yield_constr.constraint(trace_segment * (F::ONE - trace_segment));
     yield_constr.constraint(trace_virtual * (F::ONE - trace_virtual));
 
+    // Second set of ordering constraints: trace matches with no change in corresponding column.
     yield_constr.constraint(trace_context * (next_addr_context - addr_context));
     yield_constr.constraint(trace_segment * (next_addr_segment - addr_segment));
     yield_constr.constraint(trace_virtual * (next_addr_virtual - addr_virtual));
@@ -62,6 +64,7 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     let segment_range_check = vars.local_values[super::range_check_degree::col_rc_16_input(1)];
     let virtual_range_check = vars.local_values[super::range_check_degree::col_rc_16_input(2)];
 
+    // Third set of ordering constraints: range-check difference in the column that should be increasing.
     yield_constr.constraint(
         context_range_check
             - trace_context * (next_addr_segment - addr_segment)
