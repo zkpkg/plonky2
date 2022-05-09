@@ -1,3 +1,5 @@
+use starky::vars::StarkEvaluationTargets;
+
 use crate::public_input_layout::NUM_PUBLIC_INPUTS;
 use crate::registers::memory::*;
 use crate::registers::NUM_COLUMNS;
@@ -96,4 +98,81 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
     vars: StarkEvaluationTargets<D, NUM_COLUMNS, NUM_PUBLIC_INPUTS>,
     yield_constr: &mut ConstraintConsumer<P>,
 ) {
+    let one = builder.one_extension();
+
+    let addr_context = vars.local_values[SORTED_MEMORY_ADDR_CONTEXT];
+    let addr_segment = vars.local_values[SORTED_MEMORY_ADDR_SEGMENT];
+    let addr_virtual = vars.local_values[SORTED_MEMORY_ADDR_VIRTUAL];
+    let from = vars.local_values[SORTED_MEMORY_FROM]; // TODO: replace "from" and "to" with "val" and "R/W"
+    let to = vars.local_values[SORTED_MEMORY_TO];
+    let timestamp = vars.local_values[SORTED_MEMORY_TIMESTAMP];
+
+    let next_addr_context = vars.next_values[SORTED_MEMORY_ADDR_CONTEXT];
+    let next_addr_segment = vars.next_values[SORTED_MEMORY_ADDR_SEGMENT];
+    let next_addr_virtual = vars.next_values[SORTED_MEMORY_ADDR_VIRTUAL];
+    let next_from = vars.next_values[SORTED_MEMORY_FROM];
+    let next_to = vars.next_values[SORTED_MEMORY_TO];
+    let next_timestamp = vars.next_values[SORTED_MEMORY_TIMESTAMP];
+
+    let trace_context = vars.local_values[MEMORY_TRACE_CONTEXT];
+    let trace_segment = vars.local_values[MEMORY_TRACE_SEGMENT];
+    let trace_virtual = vars.local_values[MEMORY_TRACE_VIRTUAL];
+    let two_traces_combined = vars.local_values[MEMORY_TWO_TRACES_COMBINED];
+    let all_traces_combined = vars.local_values[MEMORY_ALL_TRACES_COMBINED];
+
+    let current = vars.local_values[MEMORY_CURRENT];
+    let next_current = vars.next_values[MEMORY_CURRENT];
+
+    let not_trace_context = builder.sub_extension(one, trace_context);
+    let not_trace_segment = builder.sub_extension(one, trace_segment);
+    let not_trace_virtual = builder.sub_extension(one, trace_virtual);
+    let addr_context_diff = builder.sub_extension(next_addr_context, addr_context);
+    let addr_segment_diff = builder.sub_extension(next_addr_segment, addr_segment);
+    let addr_virtual_diff = builder.sub_extension(next_addr_virtual, addr_virtual);
+    let timestamp_diff = builder.sub_extension(next_timestamp, timestamp);
+
+    // First set of ordering constraint: traces are boolean.
+    yield_constr.constraint(builder.mul_extension(trace_context, not_trace_context));
+    yield_constr.constraint(builder.mul_extension(trace_segment, not_trace_segment));
+    yield_constr.constraint(builder.mul_extension(trace_virtual, not_trace_virtual));
+
+    // Second set of ordering constraints: trace matches with no change in corresponding column.
+    yield_constr.constraint(builder.mul_extension(trace_context, addr_context_diff));
+    yield_constr.constraint(builder.mul_extension(trace_segment, addr_segment_diff));
+    yield_constr.constraint(builder.mul_extension(trace_virtual, addr_virtual_diff));
+    
+    let context_range_check = vars.local_values[super::range_check_degree::col_rc_16_input(0)];
+    let segment_range_check = vars.local_values[super::range_check_degree::col_rc_16_input(1)];
+    let virtual_range_check = vars.local_values[super::range_check_degree::col_rc_16_input(2)];
+
+    // Third set of ordering constraints: range-check difference in the column that should be increasing.
+    let diff_if_context_equal = builder.mul_extension(trace_context, addr_segment_diff);
+    let addr_context_diff_min_one = builder.sub_extension(addr_context_diff, one);
+    let diff_if_context_unequal = builder.mul_extension(not_trace_context, addr_context_diff_min_one);
+    let sum_of_diffs_context = builder.sub_extension(diff_if_context_equal, diff_if_context_unequal);
+    yield_constr.constraint(builder.sub_extension(context_range_check. sum_of_diffs_context));
+
+    let diff_if_segment_equal = builder.mul_extension(trace_segment, addr_virtual_diff);
+    let addr_segment_diff_min_one = builder.sub_extension(addr_segment_diff, one);
+    let diff_if_segment_unequal = builder.mul_extension(not_trace_segment, addr_segment_diff_min_one);
+    let sum_of_diffs_segment = builder.sub_extension(diff_if_segment_equal, diff_if_segment_unequal);
+    yield_constr.constraint(builder.sub_extension(segment_range_check. sum_of_diffs_segment));
+
+    let diff_if_virtual_equal = builder.mul_extension(trace_virtual, timestamp_diff);
+    let addr_virtual_diff_min_one = builder.sub_extension(addr_virtual_diff, one);
+    let diff_if_virtual_unequal = builder.mul_extension(not_trace_virtual, addr_virtual_diff_min_one);
+    let sum_of_diffs_virtual = builder.sub_extension(diff_if_virtual_equal, diff_if_virtual_unequal);
+    yield_constr.constraint(builder.sub_extension(virtual_range_check. sum_of_diffs_virtual));
+
+    // Helper constraints to get the product of (1 - trace_context), (1 - trace_segment), and (1 - trace_virtual).
+    let expected_two_traces_combined = builder.mul_extension(not_trace_context, not_trace_segment);
+    yield_constr.constraint(builder.sub_extension(two_traces_combined, expected_two_traces_combined));
+    let expected_all_traces_combined = builder.mul_extension(expected_two_traces_combined, not_trace_virtual)
+    yield_constr.constraint(builder.sub_extension(all_traces_combined, expected_all_traces_combined));
+
+    // Enumerate purportedly-ordered log using current value c.
+    yield_constr.constraint_first_row(current);
+    yield_constr.constraint(builder.sub_extension(current, from));
+    let expected_next_current = builder.mul_extension(all_traces_combined, to);
+    yield_constr.constraint(builder.sub_extension(next_current, expected_next_current));
 }
