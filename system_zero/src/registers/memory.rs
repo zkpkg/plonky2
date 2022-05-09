@@ -19,6 +19,5 @@ pub(crate) const MEMORY_TRACE_SEGMENT: usize = MEMORY_TRACE_CONTEXT + 1;
 pub(crate) const MEMORY_TRACE_VIRTUAL: usize = MEMORY_TRACE_SEGMENT + 1;
 pub(crate) const MEMORY_TWO_TRACES_COMBINED: usize = MEMORY_TRACE_VIRTUAL + 1;
 pub(crate) const MEMORY_ALL_TRACES_COMBINED: usize = MEMORY_TWO_TRACES_COMBINED + 1;
-pub(crate) const MEMORY_CURRENT: usize = MEMORY_ALL_TRACES_COMBINED + 1;
 
-pub(super) const END: usize = MEMORY_CURRENT + 1;
+pub(super) const END: usize = MEMORY_ALL_TRACES_COMBINED + 1;

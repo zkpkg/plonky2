@@ -27,7 +27,7 @@ pub struct MemorySegment {
     pub content: Vec<u8>,
 }
 
-pub(crate) fn generate_memory<F: PrimeField64>(values: &mut [F; NUM_COLUMNS]) {
+pub(crate) fn generate_memory<F: PrimeField64>(trace_cols: &mut [Vec<F>]) {
     todo!()
 }
 
@@ -56,9 +56,6 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     let trace_virtual = vars.local_values[MEMORY_TRACE_VIRTUAL];
     let two_traces_combined = vars.local_values[MEMORY_TWO_TRACES_COMBINED];
     let all_traces_combined = vars.local_values[MEMORY_ALL_TRACES_COMBINED];
-
-    let current = vars.local_values[MEMORY_CURRENT];
-    let next_current = vars.next_values[MEMORY_CURRENT];
 
     let not_trace_context = one - trace_context;
     let not_trace_segment = one - trace_segment;
@@ -102,10 +99,8 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     yield_constr.constraint(two_traces_combined - not_trace_context * not_trace_segment);
     yield_constr.constraint(all_traces_combined - two_traces_combined * not_trace_virtual);
 
-    // Enumerate purportedly-ordered log using current value c.
-    yield_constr.constraint_first_row(current);
-    yield_constr.constraint(current - from);
-    yield_constr.constraint(next_current - all_traces_combined * to);
+    // Enumerate purportedly-ordered log.
+    yield_constr.constraint(next_from - all_traces_combined * to);
 }
 
 pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usize>(
@@ -134,9 +129,6 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
     let trace_virtual = vars.local_values[MEMORY_TRACE_VIRTUAL];
     let two_traces_combined = vars.local_values[MEMORY_TWO_TRACES_COMBINED];
     let all_traces_combined = vars.local_values[MEMORY_ALL_TRACES_COMBINED];
-
-    let current = vars.local_values[MEMORY_CURRENT];
-    let next_current = vars.next_values[MEMORY_CURRENT];
 
     let not_trace_context = builder.sub_extension(one, trace_context);
     let not_trace_segment = builder.sub_extension(one, trace_segment);
@@ -209,11 +201,8 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
     let all_traces_diff = builder.sub_extension(all_traces_combined, expected_all_traces_combined);
     yield_constr.constraint(builder, all_traces_diff);
 
-    // Enumerate purportedly-ordered log using current value c.
-    yield_constr.constraint_first_row(builder, current);
-    let current_from_diff = builder.sub_extension(current, from);
-    yield_constr.constraint(builder, current_from_diff);
-    let expected_next_current = builder.mul_extension(all_traces_combined, to);
-    let next_current_diff = builder.sub_extension(next_current, expected_next_current);
-    yield_constr.constraint(builder, next_current_diff);
+    // Enumerate purportedly-ordered log.
+    let expected_next_from = builder.mul_extension(all_traces_combined, to);
+    let next_from_diff = builder.sub_extension(next_from, expected_next_from);
+    yield_constr.constraint(builder, next_from_diff);
 }
