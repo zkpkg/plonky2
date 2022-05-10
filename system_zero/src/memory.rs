@@ -128,7 +128,8 @@ pub fn generate_unchanged_flags<F: PrimeField64>(
         segment_unchanged.push(this_segment_unchanged);
         virtual_unchanged.push(this_virtual_unchanged);
 
-        address_unchanged.push(this_context_unchanged * this_segment_unchanged * this_virtual_unchanged);
+        address_unchanged
+            .push(this_context_unchanged * this_segment_unchanged * this_virtual_unchanged);
     }
 
     context_unchanged.push(F::ZERO);
@@ -207,7 +208,8 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     );
 
     // Helper constraints to get the product of (1 - context_unchanged), (1 - segment_unchanged), and (1 - virtual_unchanged).
-    yield_constr.constraint(address_unchanged - context_unchanged * segment_unchanged * virtual_unchanged);
+    yield_constr
+        .constraint(address_unchanged - context_unchanged * segment_unchanged * virtual_unchanged);
 
     // Enumerate purportedly-ordered log.
     yield_constr.constraint(next_is_read * address_unchanged * (next_value - value));
