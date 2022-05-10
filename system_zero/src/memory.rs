@@ -36,8 +36,14 @@ pub(crate) fn generate_memory<F: PrimeField64>(trace_cols: &mut [Vec<F>]) {
     let is_read = &trace_cols[MEMORY_IS_READ];
     let timestamp = &trace_cols[MEMORY_TIMESTAMP];
 
-    let (sorted_context, sorted_segment, sorted_virtual, sorted_value, sorted_is_read, sorted_timestamp) =
-        sort_memory_ops(context, segment, virtuals, value, is_read, timestamp);
+    let (
+        sorted_context,
+        sorted_segment,
+        sorted_virtual,
+        sorted_value,
+        sorted_is_read,
+        sorted_timestamp,
+    ) = sort_memory_ops(context, segment, virtuals, value, is_read, timestamp);
 
     let (trace_context, trace_segment, trace_virtual, address_unchanged) =
         generate_traces(context, segment, virtuals, value, is_read, timestamp);
@@ -299,8 +305,7 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
     yield_constr.constraint(builder, virtual_range_check_constraint);
 
     // Helper constraint to check address_changes.
-    let first_two_traces =
-        builder.mul_extension(trace_context, trace_segment);
+    let first_two_traces = builder.mul_extension(trace_context, trace_segment);
     let all_traces = builder.mul_extension(first_two_traces, trace_virtual);
     let all_traces_diff = builder.sub_extension(address_unchanged, all_traces);
     yield_constr.constraint(builder, all_traces_diff);
