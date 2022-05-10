@@ -1,3 +1,4 @@
+use itertools::{izip, multiunzip};
 use plonky2::field::extension_field::Extendable;
 use plonky2::field::field_types::{Field, PrimeField64};
 use plonky2::field::packed_field::PackedField;
@@ -28,7 +29,125 @@ pub struct MemorySegment {
 }
 
 pub(crate) fn generate_memory<F: PrimeField64>(trace_cols: &mut [Vec<F>]) {
-    todo!()
+    let context = &trace_cols[MEMORY_ADDR_CONTEXT];
+    let segment = &trace_cols[MEMORY_ADDR_SEGMENT];
+    let virtuals = &trace_cols[MEMORY_ADDR_VIRTUAL];
+    let from = &trace_cols[MEMORY_FROM];
+    let to = &trace_cols[MEMORY_TO];
+    let timestamp = &trace_cols[MEMORY_TIMESTAMP];
+
+    let (sorted_context, sorted_segment, sorted_virtual, sorted_from, sorted_to, sorted_timestamp) =
+        sort_memory_ops(context, segment, virtuals, from, to, timestamp);
+
+    let (trace_context, trace_segment, trace_virtual, two_traces_combined, all_traces_combined) =
+        generate_traces(context, segment, virtuals, from, to, timestamp);
+
+    trace_cols[SORTED_MEMORY_ADDR_CONTEXT] = sorted_context;
+    trace_cols[SORTED_MEMORY_ADDR_SEGMENT] = sorted_segment;
+    trace_cols[SORTED_MEMORY_ADDR_VIRTUAL] = sorted_virtual;
+    trace_cols[SORTED_MEMORY_FROM] = sorted_from;
+    trace_cols[SORTED_MEMORY_TO] = sorted_to;
+    trace_cols[SORTED_MEMORY_TIMESTAMP] = sorted_timestamp;
+
+    trace_cols[MEMORY_TRACE_CONTEXT] = trace_context;
+    trace_cols[MEMORY_TRACE_SEGMENT] = trace_segment;
+    trace_cols[MEMORY_TRACE_VIRTUAL] = trace_virtual;
+    trace_cols[MEMORY_TWO_TRACES_COMBINED] = two_traces_combined;
+    trace_cols[MEMORY_ALL_TRACES_COMBINED] = all_traces_combined;
+}
+
+pub fn sort_memory_ops<F: PrimeField64>(
+    context: &[F],
+    segment: &[F],
+    virtuals: &[F],
+    from: &[F],
+    to: &[F],
+    timestamp: &[F],
+) -> (Vec<F>, Vec<F>, Vec<F>, Vec<F>, Vec<F>, Vec<F>) {
+    let mut ops: Vec<(F, F, F, F, F, F)> = izip!(
+        context.iter().cloned(),
+        segment.iter().cloned(),
+        virtuals.iter().cloned(),
+        from.iter().cloned(),
+        to.iter().cloned(),
+        timestamp.iter().cloned()
+    )
+    .collect();
+
+    ops.sort_by(|&(c1, s1, v1, _, _, t1), &(c2, s2, v2, _, _, t2)| {
+        (
+            c1.to_noncanonical_u64(),
+            s1.to_noncanonical_u64(),
+            v1.to_noncanonical_u64(),
+            t1.to_noncanonical_u64(),
+        )
+            .cmp(&(
+                c2.to_noncanonical_u64(),
+                s2.to_noncanonical_u64(),
+                v2.to_noncanonical_u64(),
+                t2.to_noncanonical_u64(),
+            ))
+    });
+
+    multiunzip(ops)
+}
+
+pub fn generate_traces<F: PrimeField64>(
+    context: &[F],
+    segment: &[F],
+    virtuals: &[F],
+    from: &[F],
+    to: &[F],
+    timestamp: &[F],
+) -> (Vec<F>, Vec<F>, Vec<F>, Vec<F>, Vec<F>) {
+    let num_ops = context.len();
+    let mut trace_context = Vec::new();
+    let mut trace_segment = Vec::new();
+    let mut trace_virtual = Vec::new();
+    let mut two_traces_combined = Vec::new();
+    let mut all_traces_combined = Vec::new();
+    for idx in 0..num_ops - 1 {
+        let this_trace_context = if context[idx] == context[idx + 1] {
+            F::ONE
+        } else {
+            F::ZERO
+        };
+        let this_trace_segment = if segment[idx] == segment[idx + 1] {
+            F::ONE
+        } else {
+            F::ZERO
+        };
+        let this_trace_virtual = if virtuals[idx] == virtuals[idx + 1] {
+            F::ONE
+        } else {
+            F::ZERO
+        };
+
+        trace_context.push(this_trace_context);
+        trace_segment.push(this_trace_segment);
+        trace_virtual.push(this_trace_virtual);
+
+        two_traces_combined.push((F::ONE - this_trace_context) * (F::ONE - this_trace_segment));
+        all_traces_combined.push(
+            (F::ONE - this_trace_context)
+                * (F::ONE - this_trace_segment)
+                * (F::ONE - this_trace_virtual),
+        );
+    }
+
+    trace_context.push(F::ZERO);
+    trace_segment.push(F::ZERO);
+    trace_virtual.push(F::ZERO);
+    two_traces_combined.push(F::ZERO);
+    all_traces_combined.push(F::ZERO);
+
+    (
+        trace_context,
+        trace_segment,
+        trace_virtual,
+        two_traces_combined,
+        all_traces_combined,
+    )
 }
 
 pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
