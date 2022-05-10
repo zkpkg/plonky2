@@ -32,44 +32,43 @@ pub(crate) fn generate_memory<F: PrimeField64>(trace_cols: &mut [Vec<F>]) {
     let context = &trace_cols[MEMORY_ADDR_CONTEXT];
     let segment = &trace_cols[MEMORY_ADDR_SEGMENT];
     let virtuals = &trace_cols[MEMORY_ADDR_VIRTUAL];
-    let from = &trace_cols[MEMORY_FROM];
-    let to = &trace_cols[MEMORY_TO];
+    let value = &trace_cols[MEMORY_VALUE];
+    let is_read = &trace_cols[MEMORY_IS_READ];
     let timestamp = &trace_cols[MEMORY_TIMESTAMP];
 
-    let (sorted_context, sorted_segment, sorted_virtual, sorted_from, sorted_to, sorted_timestamp) =
-        sort_memory_ops(context, segment, virtuals, from, to, timestamp);
+    let (sorted_context, sorted_segment, sorted_virtual, sorted_value, sorted_is_read, sorted_timestamp) =
+        sort_memory_ops(context, segment, virtuals, value, is_read, timestamp);
 
-    let (trace_context, trace_segment, trace_virtual, two_traces_combined, all_traces_combined) =
-        generate_traces(context, segment, virtuals, from, to, timestamp);
+    let (trace_context, trace_segment, trace_virtual, address_unchanged) =
+        generate_traces(context, segment, virtuals, value, is_read, timestamp);
 
     trace_cols[SORTED_MEMORY_ADDR_CONTEXT] = sorted_context;
     trace_cols[SORTED_MEMORY_ADDR_SEGMENT] = sorted_segment;
     trace_cols[SORTED_MEMORY_ADDR_VIRTUAL] = sorted_virtual;
-    trace_cols[SORTED_MEMORY_FROM] = sorted_from;
-    trace_cols[SORTED_MEMORY_TO] = sorted_to;
+    trace_cols[SORTED_MEMORY_VALUE] = sorted_value;
+    trace_cols[SORTED_MEMORY_IS_READ] = sorted_is_read;
     trace_cols[SORTED_MEMORY_TIMESTAMP] = sorted_timestamp;
 
     trace_cols[MEMORY_TRACE_CONTEXT] = trace_context;
     trace_cols[MEMORY_TRACE_SEGMENT] = trace_segment;
     trace_cols[MEMORY_TRACE_VIRTUAL] = trace_virtual;
-    trace_cols[MEMORY_TWO_TRACES_COMBINED] = two_traces_combined;
-    trace_cols[MEMORY_ALL_TRACES_COMBINED] = all_traces_combined;
+    trace_cols[MEMORY_ADDRESS_UNCHANGED] = address_unchanged;
 }
 
 pub fn sort_memory_ops<F: PrimeField64>(
     context: &[F],
     segment: &[F],
     virtuals: &[F],
-    from: &[F],
-    to: &[F],
+    value: &[F],
+    is_read: &[F],
     timestamp: &[F],
 ) -> (Vec<F>, Vec<F>, Vec<F>, Vec<F>, Vec<F>, Vec<F>) {
     let mut ops: Vec<(F, F, F, F, F, F)> = izip!(
         context.iter().cloned(),
         segment.iter().cloned(),
         virtuals.iter().cloned(),
-        from.iter().cloned(),
-        to.iter().cloned(),
+        value.iter().cloned(),
+        is_read.iter().cloned(),
         timestamp.iter().cloned()
     )
     .collect();
@@ -96,16 +95,15 @@ pub fn generate_traces<F: PrimeField64>(
     context: &[F],
     segment: &[F],
     virtuals: &[F],
-    from: &[F],
-    to: &[F],
+    value: &[F],
+    is_read: &[F],
     timestamp: &[F],
-) -> (Vec<F>, Vec<F>, Vec<F>, Vec<F>, Vec<F>) {
+) -> (Vec<F>, Vec<F>, Vec<F>, Vec<F>) {
     let num_ops = context.len();
     let mut trace_context = Vec::new();
     let mut trace_segment = Vec::new();
     let mut trace_virtual = Vec::new();
-    let mut two_traces_combined = Vec::new();
-    let mut all_traces_combined = Vec::new();
+    let mut address_unchanged = Vec::new();
     for idx in 0..num_ops - 1 {
         let this_trace_context = if context[idx] == context[idx + 1] {
             F::ONE
@@ -127,26 +125,19 @@ pub fn generate_traces<F: PrimeField64>(
         trace_segment.push(this_trace_segment);
         trace_virtual.push(this_trace_virtual);
 
-        two_traces_combined.push((F::ONE - this_trace_context) * (F::ONE - this_trace_segment));
-        all_traces_combined.push(
-            (F::ONE - this_trace_context)
-                * (F::ONE - this_trace_segment)
-                * (F::ONE - this_trace_virtual),
-        );
+        address_unchanged.push(this_trace_context * this_trace_segment * this_trace_virtual);
     }
 
     trace_context.push(F::ZERO);
     trace_segment.push(F::ZERO);
     trace_virtual.push(F::ZERO);
-    two_traces_combined.push(F::ZERO);
-    all_traces_combined.push(F::ZERO);
+    address_unchanged.push(F::ZERO);
 
     (
         trace_context,
         trace_segment,
         trace_virtual,
-        two_traces_combined,
-        all_traces_combined,
+        address_unchanged,
     )
 }
 
@@ -159,22 +150,20 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     let addr_context = vars.local_values[SORTED_MEMORY_ADDR_CONTEXT];
     let addr_segment = vars.local_values[SORTED_MEMORY_ADDR_SEGMENT];
     let addr_virtual = vars.local_values[SORTED_MEMORY_ADDR_VIRTUAL];
-    let from = vars.local_values[SORTED_MEMORY_FROM]; // TODO: replace "from" and "to" with "val" and "R/W"
-    let to = vars.local_values[SORTED_MEMORY_TO];
+    let value = vars.local_values[SORTED_MEMORY_VALUE];
     let timestamp = vars.local_values[SORTED_MEMORY_TIMESTAMP];
 
     let next_addr_context = vars.next_values[SORTED_MEMORY_ADDR_CONTEXT];
     let next_addr_segment = vars.next_values[SORTED_MEMORY_ADDR_SEGMENT];
     let next_addr_virtual = vars.next_values[SORTED_MEMORY_ADDR_VIRTUAL];
-    let next_from = vars.next_values[SORTED_MEMORY_FROM];
-    let next_to = vars.next_values[SORTED_MEMORY_TO];
+    let next_value = vars.next_values[SORTED_MEMORY_VALUE];
+    let next_is_read = vars.next_values[SORTED_MEMORY_IS_READ];
     let next_timestamp = vars.next_values[SORTED_MEMORY_TIMESTAMP];
 
     let trace_context = vars.local_values[MEMORY_TRACE_CONTEXT];
     let trace_segment = vars.local_values[MEMORY_TRACE_SEGMENT];
     let trace_virtual = vars.local_values[MEMORY_TRACE_VIRTUAL];
-    let two_traces_combined = vars.local_values[MEMORY_TWO_TRACES_COMBINED];
-    let all_traces_combined = vars.local_values[MEMORY_ALL_TRACES_COMBINED];
+    let address_unchanged = vars.local_values[MEMORY_ADDRESS_UNCHANGED];
 
     let not_trace_context = one - trace_context;
     let not_trace_segment = one - trace_segment;
@@ -215,11 +204,10 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     );
 
     // Helper constraints to get the product of (1 - trace_context), (1 - trace_segment), and (1 - trace_virtual).
-    yield_constr.constraint(two_traces_combined - not_trace_context * not_trace_segment);
-    yield_constr.constraint(all_traces_combined - two_traces_combined * not_trace_virtual);
+    yield_constr.constraint(address_unchanged - trace_context * trace_segment * trace_virtual);
 
     // Enumerate purportedly-ordered log.
-    yield_constr.constraint(next_from - all_traces_combined * to);
+    yield_constr.constraint(next_is_read * address_unchanged * (next_value - value));
 }
 
 pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usize>(
@@ -232,22 +220,21 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
     let addr_context = vars.local_values[SORTED_MEMORY_ADDR_CONTEXT];
     let addr_segment = vars.local_values[SORTED_MEMORY_ADDR_SEGMENT];
     let addr_virtual = vars.local_values[SORTED_MEMORY_ADDR_VIRTUAL];
-    let from = vars.local_values[SORTED_MEMORY_FROM]; // TODO: replace "from" and "to" with "val" and "R/W"
-    let to = vars.local_values[SORTED_MEMORY_TO];
+    let value = vars.local_values[SORTED_MEMORY_VALUE];
+    let is_read = vars.local_values[SORTED_MEMORY_IS_READ];
     let timestamp = vars.local_values[SORTED_MEMORY_TIMESTAMP];
 
     let next_addr_context = vars.next_values[SORTED_MEMORY_ADDR_CONTEXT];
     let next_addr_segment = vars.next_values[SORTED_MEMORY_ADDR_SEGMENT];
     let next_addr_virtual = vars.next_values[SORTED_MEMORY_ADDR_VIRTUAL];
-    let next_from = vars.next_values[SORTED_MEMORY_FROM];
-    let next_to = vars.next_values[SORTED_MEMORY_TO];
+    let next_value = vars.next_values[SORTED_MEMORY_VALUE];
+    let next_is_read = vars.next_values[SORTED_MEMORY_IS_READ];
     let next_timestamp = vars.next_values[SORTED_MEMORY_TIMESTAMP];
 
     let trace_context = vars.local_values[MEMORY_TRACE_CONTEXT];
     let trace_segment = vars.local_values[MEMORY_TRACE_SEGMENT];
     let trace_virtual = vars.local_values[MEMORY_TRACE_VIRTUAL];
-    let two_traces_combined = vars.local_values[MEMORY_TWO_TRACES_COMBINED];
-    let all_traces_combined = vars.local_values[MEMORY_ALL_TRACES_COMBINED];
+    let address_unchanged = vars.local_values[MEMORY_ADDRESS_UNCHANGED];
 
     let not_trace_context = builder.sub_extension(one, trace_context);
     let not_trace_segment = builder.sub_extension(one, trace_segment);
@@ -311,17 +298,16 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
         builder.sub_extension(virtual_range_check, sum_of_diffs_virtual);
     yield_constr.constraint(builder, virtual_range_check_constraint);
 
-    // Helper constraints to get the product of (1 - trace_context), (1 - trace_segment), and (1 - trace_virtual).
-    let expected_two_traces_combined = builder.mul_extension(not_trace_context, not_trace_segment);
-    let two_traces_diff = builder.sub_extension(two_traces_combined, expected_two_traces_combined);
-    yield_constr.constraint(builder, two_traces_diff);
-    let expected_all_traces_combined =
-        builder.mul_extension(expected_two_traces_combined, not_trace_virtual);
-    let all_traces_diff = builder.sub_extension(all_traces_combined, expected_all_traces_combined);
+    // Helper constraint to check address_changes.
+    let first_two_traces =
+        builder.mul_extension(trace_context, trace_segment);
+    let all_traces = builder.mul_extension(first_two_traces, trace_virtual);
+    let all_traces_diff = builder.sub_extension(address_unchanged, all_traces);
     yield_constr.constraint(builder, all_traces_diff);
 
     // Enumerate purportedly-ordered log.
-    let expected_next_from = builder.mul_extension(all_traces_combined, to);
-    let next_from_diff = builder.sub_extension(next_from, expected_next_from);
-    yield_constr.constraint(builder, next_from_diff);
+    let value_diff = builder.sub_extension(next_value, value);
+    let zero_if_read = builder.mul_extension(address_unchanged, value_diff);
+    let read_constraint = builder.mul_extension(next_is_read, zero_if_read);
+    yield_constr.constraint(builder, read_constraint);
 }
