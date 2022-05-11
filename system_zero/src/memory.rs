@@ -32,7 +32,7 @@ pub(crate) fn generate_memory<F: PrimeField64>(trace_cols: &mut [Vec<F>]) {
     let context = &trace_cols[MEMORY_ADDR_CONTEXT];
     let segment = &trace_cols[MEMORY_ADDR_SEGMENT];
     let virtuals = &trace_cols[MEMORY_ADDR_VIRTUAL];
-    let value = &trace_cols[MEMORY_VALUE];
+    let values: Vec<Vec<F>> = (0..8).map(|i| &trace_cols[memory_value_limb(i)]).cloned().collect();
     let is_read = &trace_cols[MEMORY_IS_READ];
     let timestamp = &trace_cols[MEMORY_TIMESTAMP];
 
@@ -40,10 +40,10 @@ pub(crate) fn generate_memory<F: PrimeField64>(trace_cols: &mut [Vec<F>]) {
         sorted_context,
         sorted_segment,
         sorted_virtual,
-        sorted_value,
+        sorted_values,
         sorted_is_read,
         sorted_timestamp,
-    ) = sort_memory_ops(context, segment, virtuals, value, is_read, timestamp);
+    ) = sort_memory_ops(context, segment, virtuals, &values, is_read, timestamp);
 
     let (context_unchanged, segment_unchanged, virtual_unchanged, address_unchanged) =
         generate_unchanged_flags(context, segment, virtuals);
@@ -51,7 +51,9 @@ pub(crate) fn generate_memory<F: PrimeField64>(trace_cols: &mut [Vec<F>]) {
     trace_cols[SORTED_MEMORY_ADDR_CONTEXT] = sorted_context;
     trace_cols[SORTED_MEMORY_ADDR_SEGMENT] = sorted_segment;
     trace_cols[SORTED_MEMORY_ADDR_VIRTUAL] = sorted_virtual;
-    trace_cols[SORTED_MEMORY_VALUE] = sorted_value;
+    for i in 0..8 {
+        trace_cols[sorted_memory_value_limb(i)] = sorted_values[i].clone();
+    }
     trace_cols[SORTED_MEMORY_IS_READ] = sorted_is_read;
     trace_cols[SORTED_MEMORY_TIMESTAMP] = sorted_timestamp;
 
@@ -65,15 +67,15 @@ pub fn sort_memory_ops<F: PrimeField64>(
     context: &[F],
     segment: &[F],
     virtuals: &[F],
-    value: &[F],
+    values: &[Vec<F>],
     is_read: &[F],
     timestamp: &[F],
-) -> (Vec<F>, Vec<F>, Vec<F>, Vec<F>, Vec<F>, Vec<F>) {
-    let mut ops: Vec<(F, F, F, F, F, F)> = izip!(
+) -> (Vec<F>, Vec<F>, Vec<F>, Vec<Vec<F>>, Vec<F>, Vec<F>) {
+    let mut ops: Vec<(F, F, F, Vec<F>, F, F)> = izip!(
         context.iter().cloned(),
         segment.iter().cloned(),
         virtuals.iter().cloned(),
-        value.iter().cloned(),
+        values.iter().cloned(),
         is_read.iter().cloned(),
         timestamp.iter().cloned()
     )
@@ -154,13 +156,17 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     let addr_context = vars.local_values[SORTED_MEMORY_ADDR_CONTEXT];
     let addr_segment = vars.local_values[SORTED_MEMORY_ADDR_SEGMENT];
     let addr_virtual = vars.local_values[SORTED_MEMORY_ADDR_VIRTUAL];
-    let value = vars.local_values[SORTED_MEMORY_VALUE];
+    let values: Vec<_> = (0..8)
+        .map(|i| vars.local_values[sorted_memory_value_limb(i)])
+        .collect();
     let timestamp = vars.local_values[SORTED_MEMORY_TIMESTAMP];
 
     let next_addr_context = vars.next_values[SORTED_MEMORY_ADDR_CONTEXT];
     let next_addr_segment = vars.next_values[SORTED_MEMORY_ADDR_SEGMENT];
     let next_addr_virtual = vars.next_values[SORTED_MEMORY_ADDR_VIRTUAL];
-    let next_value = vars.next_values[SORTED_MEMORY_VALUE];
+    let next_values: Vec<_> = (0..8)
+        .map(|i| vars.next_values[sorted_memory_value_limb(i)])
+        .collect();
     let next_is_read = vars.next_values[SORTED_MEMORY_IS_READ];
     let next_timestamp = vars.next_values[SORTED_MEMORY_TIMESTAMP];
 
@@ -212,7 +218,9 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
         .constraint(address_unchanged - context_unchanged * segment_unchanged * virtual_unchanged);
 
     // Enumerate purportedly-ordered log.
-    yield_constr.constraint(next_is_read * address_unchanged * (next_value - value));
+    for i in 0..8 {
+        yield_constr.constraint(next_is_read * address_unchanged * (next_values[i] - values[i]));
+    }
 }
 
 pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usize>(
@@ -225,13 +233,17 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
     let addr_context = vars.local_values[SORTED_MEMORY_ADDR_CONTEXT];
     let addr_segment = vars.local_values[SORTED_MEMORY_ADDR_SEGMENT];
     let addr_virtual = vars.local_values[SORTED_MEMORY_ADDR_VIRTUAL];
-    let value = vars.local_values[SORTED_MEMORY_VALUE];
+    let values: Vec<_> = (0..8)
+        .map(|i| vars.local_values[sorted_memory_value_limb(i)])
+        .collect();
     let timestamp = vars.local_values[SORTED_MEMORY_TIMESTAMP];
 
     let next_addr_context = vars.next_values[SORTED_MEMORY_ADDR_CONTEXT];
     let next_addr_segment = vars.next_values[SORTED_MEMORY_ADDR_SEGMENT];
     let next_addr_virtual = vars.next_values[SORTED_MEMORY_ADDR_VIRTUAL];
-    let next_value = vars.next_values[SORTED_MEMORY_VALUE];
+    let next_values: Vec<_> = (0..8)
+        .map(|i| vars.next_values[sorted_memory_value_limb(i)])
+        .collect();
     let next_is_read = vars.next_values[SORTED_MEMORY_IS_READ];
     let next_timestamp = vars.next_values[SORTED_MEMORY_TIMESTAMP];
 
@@ -309,8 +321,10 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
     yield_constr.constraint(builder, all_unchanged_diff);
 
     // Enumerate purportedly-ordered log.
-    let value_diff = builder.sub_extension(next_value, value);
-    let zero_if_read = builder.mul_extension(address_unchanged, value_diff);
-    let read_constraint = builder.mul_extension(next_is_read, zero_if_read);
-    yield_constr.constraint(builder, read_constraint);
+    for i in 0..8 {
+        let value_diff = builder.sub_extension(next_values[i], values[i]);
+        let zero_if_read = builder.mul_extension(address_unchanged, value_diff);
+        let read_constraint = builder.mul_extension(next_is_read, zero_if_read);
+        yield_constr.constraint(builder, read_constraint);
+    }
 }

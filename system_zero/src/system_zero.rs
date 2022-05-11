@@ -167,23 +167,29 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for SystemZero<F,
         }
 
         pairs.push(PermutationPair {
-            column_pairs: vec![
-                (
-                    memory::MEMORY_ADDR_CONTEXT,
-                    memory::SORTED_MEMORY_ADDR_CONTEXT,
-                ),
-                (
-                    memory::MEMORY_ADDR_SEGMENT,
-                    memory::SORTED_MEMORY_ADDR_SEGMENT,
-                ),
-                (
-                    memory::MEMORY_ADDR_VIRTUAL,
-                    memory::SORTED_MEMORY_ADDR_VIRTUAL,
-                ),
-                (memory::MEMORY_VALUE, memory::SORTED_MEMORY_VALUE),
-                (memory::MEMORY_IS_READ, memory::MEMORY_IS_READ),
-                (memory::MEMORY_TIMESTAMP, memory::SORTED_MEMORY_TIMESTAMP),
-            ],
+            column_pairs: {
+                let mut value_pairs: Vec<_> = (0..8).map(|i| 
+                    (memory::memory_value_limb(i), memory::sorted_memory_value_limb(i))
+                ).collect();
+                let mut pairs = vec![
+                    (
+                        memory::MEMORY_ADDR_CONTEXT,
+                        memory::SORTED_MEMORY_ADDR_CONTEXT,
+                    ),
+                    (
+                        memory::MEMORY_ADDR_SEGMENT,
+                        memory::SORTED_MEMORY_ADDR_SEGMENT,
+                    ),
+                    (
+                        memory::MEMORY_ADDR_VIRTUAL,
+                        memory::SORTED_MEMORY_ADDR_VIRTUAL,
+                    ),
+                    (memory::MEMORY_IS_READ, memory::MEMORY_IS_READ),
+                    (memory::MEMORY_TIMESTAMP, memory::SORTED_MEMORY_TIMESTAMP),
+                ];
+                pairs.append(&mut value_pairs);
+                pairs
+            }
         });
 
         pairs
