@@ -168,9 +168,14 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for SystemZero<F,
 
         pairs.push(PermutationPair {
             column_pairs: {
-                let mut value_pairs: Vec<_> = (0..8).map(|i| 
-                    (memory::memory_value_limb(i), memory::sorted_memory_value_limb(i))
-                ).collect();
+                let mut value_pairs: Vec<_> = (0..8)
+                    .map(|i| {
+                        (
+                            memory::memory_value_limb(i),
+                            memory::sorted_memory_value_limb(i),
+                        )
+                    })
+                    .collect();
                 let mut pairs = vec![
                     (
                         memory::MEMORY_ADDR_CONTEXT,
@@ -189,7 +194,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for SystemZero<F,
                 ];
                 pairs.append(&mut value_pairs);
                 pairs
-            }
+            },
         });
 
         pairs

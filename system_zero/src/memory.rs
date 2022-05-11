@@ -32,7 +32,10 @@ pub(crate) fn generate_memory<F: PrimeField64>(trace_cols: &mut [Vec<F>]) {
     let context = &trace_cols[MEMORY_ADDR_CONTEXT];
     let segment = &trace_cols[MEMORY_ADDR_SEGMENT];
     let virtuals = &trace_cols[MEMORY_ADDR_VIRTUAL];
-    let values: Vec<Vec<F>> = (0..8).map(|i| &trace_cols[memory_value_limb(i)]).cloned().collect();
+    let values: Vec<Vec<F>> = (0..8)
+        .map(|i| &trace_cols[memory_value_limb(i)])
+        .cloned()
+        .collect();
     let is_read = &trace_cols[MEMORY_IS_READ];
     let timestamp = &trace_cols[MEMORY_TIMESTAMP];
 
