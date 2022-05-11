@@ -48,8 +48,8 @@ pub(crate) fn generate_memory<F: PrimeField64>(trace_cols: &mut [Vec<F>]) {
         sorted_timestamp,
     ) = sort_memory_ops(context, segment, virtuals, &values, is_read, timestamp);
 
-    let (context_unchanged, segment_unchanged, virtual_unchanged, address_unchanged) =
-        generate_unchanged_flags(context, segment, virtuals);
+    let (context_first_change, segment_first_change, virtual_first_change) =
+        generate_first_change_flags(context, segment, virtuals);
 
     trace_cols[SORTED_MEMORY_ADDR_CONTEXT] = sorted_context;
     trace_cols[SORTED_MEMORY_ADDR_SEGMENT] = sorted_segment;
@@ -60,10 +60,9 @@ pub(crate) fn generate_memory<F: PrimeField64>(trace_cols: &mut [Vec<F>]) {
     trace_cols[SORTED_MEMORY_IS_READ] = sorted_is_read;
     trace_cols[SORTED_MEMORY_TIMESTAMP] = sorted_timestamp;
 
-    trace_cols[MEMORY_CONTEXT_UNCHANGED] = context_unchanged;
-    trace_cols[MEMORY_SEGMENT_UNCHANGED] = segment_unchanged;
-    trace_cols[MEMORY_VIRTUAL_UNCHANGED] = virtual_unchanged;
-    trace_cols[MEMORY_ADDRESS_UNCHANGED] = address_unchanged;
+    trace_cols[MEMORY_CONTEXT_FIRST_CHANGE] = context_first_change;
+    trace_cols[MEMORY_SEGMENT_FIRST_CHANGE] = segment_first_change;
+    trace_cols[MEMORY_VIRTUAL_FIRST_CHANGE] = virtual_first_change;
 }
 
 pub fn sort_memory_ops<F: PrimeField64>(
@@ -102,51 +101,45 @@ pub fn sort_memory_ops<F: PrimeField64>(
     multiunzip(ops)
 }
 
-pub fn generate_unchanged_flags<F: PrimeField64>(
+pub fn generate_first_change_flags<F: PrimeField64>(
     context: &[F],
     segment: &[F],
     virtuals: &[F],
-) -> (Vec<F>, Vec<F>, Vec<F>, Vec<F>) {
+) -> (Vec<F>, Vec<F>, Vec<F>) {
     let num_ops = context.len();
-    let mut context_unchanged = Vec::new();
-    let mut segment_unchanged = Vec::new();
-    let mut virtual_unchanged = Vec::new();
-    let mut address_unchanged = Vec::new();
+    let mut context_first_change = Vec::new();
+    let mut segment_first_change = Vec::new();
+    let mut virtual_first_change = Vec::new();
     for idx in 0..num_ops - 1 {
-        let this_context_unchanged = if context[idx] == context[idx + 1] {
+        let this_context_first_change = if context[idx] == context[idx + 1] {
             F::ONE
         } else {
             F::ZERO
         };
-        let this_segment_unchanged = if segment[idx] == segment[idx + 1] {
+        let this_segment_first_change = if segment[idx] == segment[idx + 1] {
             F::ONE
         } else {
             F::ZERO
         };
-        let this_virtual_unchanged = if virtuals[idx] == virtuals[idx + 1] {
+        let this_virtual_first_change = if virtuals[idx] == virtuals[idx + 1] {
             F::ONE
         } else {
             F::ZERO
         };
 
-        context_unchanged.push(this_context_unchanged);
-        segment_unchanged.push(this_segment_unchanged);
-        virtual_unchanged.push(this_virtual_unchanged);
-
-        address_unchanged
-            .push(this_context_unchanged * this_segment_unchanged * this_virtual_unchanged);
+        context_first_change.push(this_context_first_change);
+        segment_first_change.push(this_segment_first_change);
+        virtual_first_change.push(this_virtual_first_change);
     }
 
-    context_unchanged.push(F::ZERO);
-    segment_unchanged.push(F::ZERO);
-    virtual_unchanged.push(F::ZERO);
-    address_unchanged.push(F::ZERO);
+    context_first_change.push(F::ZERO);
+    segment_first_change.push(F::ZERO);
+    virtual_first_change.push(F::ZERO);
 
     (
-        context_unchanged,
-        segment_unchanged,
-        virtual_unchanged,
-        address_unchanged,
+        context_first_change,
+        segment_first_change,
+        virtual_first_change,
     )
 }
 
@@ -173,56 +166,40 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     let next_is_read = vars.next_values[SORTED_MEMORY_IS_READ];
     let next_timestamp = vars.next_values[SORTED_MEMORY_TIMESTAMP];
 
-    let context_unchanged = vars.local_values[MEMORY_CONTEXT_UNCHANGED];
-    let segment_unchanged = vars.local_values[MEMORY_SEGMENT_UNCHANGED];
-    let virtual_unchanged = vars.local_values[MEMORY_VIRTUAL_UNCHANGED];
-    let address_unchanged = vars.local_values[MEMORY_ADDRESS_UNCHANGED];
+    let context_first_change = vars.local_values[MEMORY_CONTEXT_FIRST_CHANGE];
+    let segment_first_change = vars.local_values[MEMORY_SEGMENT_FIRST_CHANGE];
+    let virtual_first_change = vars.local_values[MEMORY_VIRTUAL_FIRST_CHANGE];
 
-    let not_context_unchanged = one - context_unchanged;
-    let not_segment_unchanged = one - segment_unchanged;
-    let not_virtual_unchanged = one - virtual_unchanged;
+    let not_context_first_change = one - context_first_change;
+    let not_segment_first_change = one - segment_first_change;
+    let not_virtual_first_change = one - virtual_first_change;
 
-    // First set of ordering constraint: unchanged flags are boolean.
-    yield_constr.constraint(context_unchanged * not_context_unchanged);
-    yield_constr.constraint(segment_unchanged * not_segment_unchanged);
-    yield_constr.constraint(virtual_unchanged * not_virtual_unchanged);
+    // First set of ordering constraint: first_change flags are boolean.
+    yield_constr.constraint(context_first_change * not_context_first_change);
+    yield_constr.constraint(segment_first_change * not_segment_first_change);
+    yield_constr.constraint(virtual_first_change * not_virtual_first_change);
 
-    // Second set of ordering constraints: unchanged flags are correct.
-    yield_constr.constraint(context_unchanged * (next_addr_context - addr_context));
-    yield_constr.constraint(segment_unchanged * (next_addr_segment - addr_segment));
-    yield_constr.constraint(virtual_unchanged * (next_addr_virtual - addr_virtual));
-
-    let context_range_check =
-        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(0)];
-    let segment_range_check =
-        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(1)];
-    let virtual_range_check =
-        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(2)];
+    // Second set of ordering constraints: first_change flags are correct.
+    yield_constr.constraint(context_first_change * (next_addr_context - addr_context));
+    yield_constr.constraint(segment_first_change * (next_addr_segment - addr_segment));
+    yield_constr.constraint(virtual_first_change * (next_addr_virtual - addr_virtual));
 
     // Third set of ordering constraints: range-check difference in the column that should be increasing.
-    yield_constr.constraint(
-        context_range_check
-            - context_unchanged * (next_addr_segment - addr_segment)
-            - not_context_unchanged * (next_addr_context - addr_context - one),
-    );
-    yield_constr.constraint(
-        segment_range_check
-            - segment_unchanged * (next_addr_virtual - addr_virtual)
-            - not_segment_unchanged * (next_addr_segment - addr_segment - one),
-    );
-    yield_constr.constraint(
-        virtual_range_check
-            - virtual_unchanged * (next_timestamp - timestamp)
-            - not_virtual_unchanged * (next_addr_virtual - addr_virtual - one),
-    );
+    let range_check =
+        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(0)];
 
-    // Helper constraints to get the product of (1 - context_unchanged), (1 - segment_unchanged), and (1 - virtual_unchanged).
-    yield_constr
-        .constraint(address_unchanged - context_unchanged * segment_unchanged * virtual_unchanged);
+    let timestamp_first_change =
+        one - context_first_change - segment_first_change - virtual_first_change;
+    let range_check_value = context_first_change * (next_addr_context - addr_context - one)
+        + segment_first_change * (next_addr_segment - addr_segment - one)
+        + virtual_first_change * (next_addr_virtual - addr_virtual - one)
+        + timestamp_first_change * (next_timestamp - timestamp - one);
+    yield_constr.constraint(range_check - range_check_value);
 
     // Enumerate purportedly-ordered log.
     for i in 0..8 {
-        yield_constr.constraint(next_is_read * address_unchanged * (next_values[i] - values[i]));
+        yield_constr
+            .constraint(next_is_read * timestamp_first_change * (next_values[i] - values[i]));
     }
 }
 
@@ -250,83 +227,110 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
     let next_is_read = vars.next_values[SORTED_MEMORY_IS_READ];
     let next_timestamp = vars.next_values[SORTED_MEMORY_TIMESTAMP];
 
-    let context_unchanged = vars.local_values[MEMORY_CONTEXT_UNCHANGED];
-    let segment_unchanged = vars.local_values[MEMORY_SEGMENT_UNCHANGED];
-    let virtual_unchanged = vars.local_values[MEMORY_VIRTUAL_UNCHANGED];
-    let address_unchanged = vars.local_values[MEMORY_ADDRESS_UNCHANGED];
+    let context_first_change = vars.local_values[MEMORY_CONTEXT_FIRST_CHANGE];
+    let segment_first_change = vars.local_values[MEMORY_SEGMENT_FIRST_CHANGE];
+    let virtual_first_change = vars.local_values[MEMORY_VIRTUAL_FIRST_CHANGE];
 
-    let not_context_unchanged = builder.sub_extension(one, context_unchanged);
-    let not_segment_unchanged = builder.sub_extension(one, segment_unchanged);
-    let not_virtual_unchanged = builder.sub_extension(one, virtual_unchanged);
+    let not_context_first_change = builder.sub_extension(one, context_first_change);
+    let not_segment_first_change = builder.sub_extension(one, segment_first_change);
+    let not_virtual_first_change = builder.sub_extension(one, virtual_first_change);
     let addr_context_diff = builder.sub_extension(next_addr_context, addr_context);
     let addr_segment_diff = builder.sub_extension(next_addr_segment, addr_segment);
     let addr_virtual_diff = builder.sub_extension(next_addr_virtual, addr_virtual);
     let timestamp_diff = builder.sub_extension(next_timestamp, timestamp);
 
     // First set of ordering constraint: traces are boolean.
-    let context_unchanged_bool = builder.mul_extension(context_unchanged, not_context_unchanged);
-    yield_constr.constraint(builder, context_unchanged_bool);
-    let segment_unchanged_bool = builder.mul_extension(segment_unchanged, not_segment_unchanged);
-    yield_constr.constraint(builder, segment_unchanged_bool);
-    let virtual_unchanged_bool = builder.mul_extension(virtual_unchanged, not_virtual_unchanged);
-    yield_constr.constraint(builder, virtual_unchanged_bool);
+    let context_first_change_bool =
+        builder.mul_extension(context_first_change, not_context_first_change);
+    yield_constr.constraint(builder, context_first_change_bool);
+    let segment_first_change_bool =
+        builder.mul_extension(segment_first_change, not_segment_first_change);
+    yield_constr.constraint(builder, segment_first_change_bool);
+    let virtual_first_change_bool =
+        builder.mul_extension(virtual_first_change, not_virtual_first_change);
+    yield_constr.constraint(builder, virtual_first_change_bool);
 
     // Second set of ordering constraints: trace matches with no change in corresponding column.
-    let cond_context_diff = builder.mul_extension(context_unchanged, addr_context_diff);
+    let cond_context_diff = builder.mul_extension(context_first_change, addr_context_diff);
     yield_constr.constraint(builder, cond_context_diff);
-    let cond_segment_diff = builder.mul_extension(segment_unchanged, addr_segment_diff);
+    let cond_segment_diff = builder.mul_extension(segment_first_change, addr_segment_diff);
     yield_constr.constraint(builder, cond_segment_diff);
-    let cond_virtual_diff = builder.mul_extension(virtual_unchanged, addr_virtual_diff);
+    let cond_virtual_diff = builder.mul_extension(virtual_first_change, addr_virtual_diff);
     yield_constr.constraint(builder, cond_virtual_diff);
 
-    let context_range_check =
-        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(0)];
-    let segment_range_check =
-        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(1)];
-    let virtual_range_check =
-        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(2)];
-
     // Third set of ordering constraints: range-check difference in the column that should be increasing.
-    let diff_if_context_equal = builder.mul_extension(context_unchanged, addr_segment_diff);
+    let range_check =
+        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(0)];
+
+    let timestamp_first_change = {
+        let mut cur = builder.sub_extension(one, context_first_change);
+        cur = builder.sub_extension(cur, segment_first_change);
+        builder.sub_extension(cur, virtual_first_change)
+    };
+
+    let context_diff = {
+        let diff = builder.sub_extension(next_addr_context, addr_context);
+        builder.sub_extension(diff, one)
+    };
+    let context_range_check = builder.mul_extension(context_first_change, context_diff);
+    let segment_diff = {
+        let diff = builder.sub_extension(next_addr_segment, addr_segment);
+        builder.sub_extension(diff, one)
+    };
+    let segment_range_check = builder.mul_extension(segment_first_change, segment_diff);
+    let virtual_diff = {
+        let diff = builder.sub_extension(next_addr_virtual, addr_virtual);
+        builder.sub_extension(diff, one)
+    };
+    let virtual_range_check = builder.mul_extension(virtual_first_change, virtual_diff);
+    let timestamp_diff = {
+        let diff = builder.sub_extension(next_timestamp, timestamp);
+        builder.sub_extension(diff, one)
+    };
+    let timestamp_range_check = builder.mul_extension(timestamp_first_change, timestamp_diff);
+
+    let range_check_value = {
+        let mut sum = builder.add_extension(context_range_check, segment_range_check);
+        sum = builder.add_extension(sum, virtual_range_check);
+        builder.add_extension(sum, timestamp_range_check)
+    };
+    let range_check_diff = builder.sub_extension(range_check, range_check_value);
+    yield_constr.constraint(builder, range_check_diff);
+
+    let diff_if_context_equal = builder.mul_extension(context_first_change, addr_segment_diff);
     let addr_context_diff_min_one = builder.sub_extension(addr_context_diff, one);
     let diff_if_context_unequal =
-        builder.mul_extension(not_context_unchanged, addr_context_diff_min_one);
+        builder.mul_extension(not_context_first_change, addr_context_diff_min_one);
     let sum_of_diffs_context =
         builder.add_extension(diff_if_context_equal, diff_if_context_unequal);
     let context_range_check_constraint =
         builder.sub_extension(context_range_check, sum_of_diffs_context);
     yield_constr.constraint(builder, context_range_check_constraint);
 
-    let diff_if_segment_equal = builder.mul_extension(segment_unchanged, addr_virtual_diff);
+    let diff_if_segment_equal = builder.mul_extension(segment_first_change, addr_virtual_diff);
     let addr_segment_diff_min_one = builder.sub_extension(addr_segment_diff, one);
     let diff_if_segment_unequal =
-        builder.mul_extension(not_segment_unchanged, addr_segment_diff_min_one);
+        builder.mul_extension(not_segment_first_change, addr_segment_diff_min_one);
     let sum_of_diffs_segment =
         builder.add_extension(diff_if_segment_equal, diff_if_segment_unequal);
     let segment_range_check_constraint =
         builder.sub_extension(segment_range_check, sum_of_diffs_segment);
     yield_constr.constraint(builder, segment_range_check_constraint);
 
-    let diff_if_virtual_equal = builder.mul_extension(virtual_unchanged, timestamp_diff);
+    let diff_if_virtual_equal = builder.mul_extension(virtual_first_change, timestamp_diff);
     let addr_virtual_diff_min_one = builder.sub_extension(addr_virtual_diff, one);
     let diff_if_virtual_unequal =
-        builder.mul_extension(not_virtual_unchanged, addr_virtual_diff_min_one);
+        builder.mul_extension(not_virtual_first_change, addr_virtual_diff_min_one);
     let sum_of_diffs_virtual =
         builder.add_extension(diff_if_virtual_equal, diff_if_virtual_unequal);
     let virtual_range_check_constraint =
         builder.sub_extension(virtual_range_check, sum_of_diffs_virtual);
     yield_constr.constraint(builder, virtual_range_check_constraint);
 
-    // Helper constraint to check address_changes.
-    let first_two_unchanged = builder.mul_extension(context_unchanged, segment_unchanged);
-    let all_unchanged = builder.mul_extension(first_two_unchanged, virtual_unchanged);
-    let all_unchanged_diff = builder.sub_extension(address_unchanged, all_unchanged);
-    yield_constr.constraint(builder, all_unchanged_diff);
-
     // Enumerate purportedly-ordered log.
     for i in 0..8 {
         let value_diff = builder.sub_extension(next_values[i], values[i]);
-        let zero_if_read = builder.mul_extension(address_unchanged, value_diff);
+        let zero_if_read = builder.mul_extension(timestamp_first_change, value_diff);
         let read_constraint = builder.mul_extension(next_is_read, zero_if_read);
         yield_constr.constraint(builder, read_constraint);
     }

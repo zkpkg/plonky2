@@ -24,9 +24,8 @@ pub const fn sorted_memory_value_limb(i: usize) -> usize {
 pub(crate) const SORTED_MEMORY_IS_READ: usize = SORTED_MEMORY_VALUE_START + 8;
 pub(crate) const SORTED_MEMORY_TIMESTAMP: usize = SORTED_MEMORY_IS_READ + 1;
 
-pub(crate) const MEMORY_CONTEXT_UNCHANGED: usize = SORTED_MEMORY_TIMESTAMP + 1;
-pub(crate) const MEMORY_SEGMENT_UNCHANGED: usize = MEMORY_CONTEXT_UNCHANGED + 1;
-pub(crate) const MEMORY_VIRTUAL_UNCHANGED: usize = MEMORY_SEGMENT_UNCHANGED + 1;
-pub(crate) const MEMORY_ADDRESS_UNCHANGED: usize = MEMORY_VIRTUAL_UNCHANGED + 1;
+pub(crate) const MEMORY_CONTEXT_FIRST_CHANGE: usize = SORTED_MEMORY_TIMESTAMP + 1;
+pub(crate) const MEMORY_SEGMENT_FIRST_CHANGE: usize = MEMORY_CONTEXT_FIRST_CHANGE + 1;
+pub(crate) const MEMORY_VIRTUAL_FIRST_CHANGE: usize = MEMORY_SEGMENT_FIRST_CHANGE + 1;
 
-pub(super) const END: usize = MEMORY_ADDRESS_UNCHANGED + 1;
+pub(super) const END: usize = MEMORY_VIRTUAL_FIRST_CHANGE + 1;
