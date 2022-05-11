@@ -49,7 +49,17 @@ pub(crate) fn generate_memory<F: PrimeField64>(trace_cols: &mut [Vec<F>]) {
     ) = sort_memory_ops(context, segment, virtuals, &values, is_read, timestamp);
 
     let (context_first_change, segment_first_change, virtual_first_change) =
-        generate_first_change_flags(context, segment, virtuals);
+        generate_first_change_flags(&sorted_context, &sorted_segment, &sorted_virtual);
+
+    let range_check_value = generate_range_check_value(
+        &sorted_context,
+        &sorted_segment,
+        &sorted_virtual,
+        &sorted_timestamp,
+        &context_first_change,
+        &segment_first_change,
+        &virtual_first_change,
+    );
 
     trace_cols[SORTED_MEMORY_ADDR_CONTEXT] = sorted_context;
     trace_cols[SORTED_MEMORY_ADDR_SEGMENT] = sorted_segment;
@@ -63,6 +73,8 @@ pub(crate) fn generate_memory<F: PrimeField64>(trace_cols: &mut [Vec<F>]) {
     trace_cols[MEMORY_CONTEXT_FIRST_CHANGE] = context_first_change;
     trace_cols[MEMORY_SEGMENT_FIRST_CHANGE] = segment_first_change;
     trace_cols[MEMORY_VIRTUAL_FIRST_CHANGE] = virtual_first_change;
+
+    trace_cols[crate::registers::range_check_degree::col_rc_degree_input(0)] = range_check_value;
 }
 
 pub fn sort_memory_ops<F: PrimeField64>(
@@ -102,27 +114,27 @@ pub fn sort_memory_ops<F: PrimeField64>(
 }
 
 pub fn generate_first_change_flags<F: PrimeField64>(
-    context: &[F],
-    segment: &[F],
-    virtuals: &[F],
+    context: &Vec<F>,
+    segment: &Vec<F>,
+    virtuals: &Vec<F>,
 ) -> (Vec<F>, Vec<F>, Vec<F>) {
     let num_ops = context.len();
     let mut context_first_change = Vec::new();
     let mut segment_first_change = Vec::new();
     let mut virtual_first_change = Vec::new();
     for idx in 0..num_ops - 1 {
-        let this_context_first_change = if context[idx] == context[idx + 1] {
+        let this_context_first_change = if context[idx] != context[idx + 1] {
             F::ONE
         } else {
             F::ZERO
         };
-        let this_segment_first_change = if segment[idx] == segment[idx + 1] {
-            F::ONE
+        let this_segment_first_change = if segment[idx] != segment[idx + 1] {
+            F::ONE * (F::ONE - this_context_first_change)
         } else {
             F::ZERO
         };
-        let this_virtual_first_change = if virtuals[idx] == virtuals[idx + 1] {
-            F::ONE
+        let this_virtual_first_change = if virtuals[idx] != virtuals[idx + 1] {
+            F::ONE * (F::ONE - this_context_first_change) * (F::ONE - this_segment_first_change)
         } else {
             F::ZERO
         };
@@ -141,6 +153,37 @@ pub fn generate_first_change_flags<F: PrimeField64>(
         segment_first_change,
         virtual_first_change,
     )
+}
+
+pub fn generate_range_check_value<F: PrimeField64>(
+    context: &Vec<F>,
+    segment: &Vec<F>,
+    virtuals: &Vec<F>,
+    timestamp: &Vec<F>,
+    context_first_change: &Vec<F>,
+    segment_first_change: &Vec<F>,
+    virtual_first_change: &Vec<F>,
+) -> Vec<F> {
+    let num_ops = context.len();
+    let mut range_check = Vec::new();
+
+    for idx in 0..num_ops - 1 {
+        let this_timestamp_first_change = F::ONE
+            - context_first_change[idx]
+            - segment_first_change[idx]
+            - virtual_first_change[idx];
+
+        range_check.push(
+            context_first_change[idx] * (context[idx + 1] - context[idx] - F::ONE)
+                + segment_first_change[idx] * (segment[idx + 1] - segment[idx] - F::ONE)
+                + virtual_first_change[idx] * (virtuals[idx + 1] - virtuals[idx] - F::ONE)
+                + this_timestamp_first_change * (timestamp[idx + 1] - timestamp[idx] - F::ONE),
+        );
+    }
+
+    range_check.push(F::ZERO);
+
+    range_check
 }
 
 pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
@@ -170,6 +213,9 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     let segment_first_change = vars.local_values[MEMORY_SEGMENT_FIRST_CHANGE];
     let virtual_first_change = vars.local_values[MEMORY_VIRTUAL_FIRST_CHANGE];
 
+    let range_check =
+        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(0)];
+
     let not_context_first_change = one - context_first_change;
     let not_segment_first_change = one - segment_first_change;
     let not_virtual_first_change = one - virtual_first_change;
@@ -185,8 +231,6 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     yield_constr.constraint(virtual_first_change * (next_addr_virtual - addr_virtual));
 
     // Third set of ordering constraints: range-check difference in the column that should be increasing.
-    let range_check =
-        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(0)];
 
     let timestamp_first_change =
         one - context_first_change - segment_first_change - virtual_first_change;
@@ -231,13 +275,15 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
     let segment_first_change = vars.local_values[MEMORY_SEGMENT_FIRST_CHANGE];
     let virtual_first_change = vars.local_values[MEMORY_VIRTUAL_FIRST_CHANGE];
 
+    let range_check =
+        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(0)];
+
     let not_context_first_change = builder.sub_extension(one, context_first_change);
     let not_segment_first_change = builder.sub_extension(one, segment_first_change);
     let not_virtual_first_change = builder.sub_extension(one, virtual_first_change);
     let addr_context_diff = builder.sub_extension(next_addr_context, addr_context);
     let addr_segment_diff = builder.sub_extension(next_addr_segment, addr_segment);
     let addr_virtual_diff = builder.sub_extension(next_addr_virtual, addr_virtual);
-    let timestamp_diff = builder.sub_extension(next_timestamp, timestamp);
 
     // First set of ordering constraint: traces are boolean.
     let context_first_change_bool =
@@ -259,9 +305,6 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
     yield_constr.constraint(builder, cond_virtual_diff);
 
     // Third set of ordering constraints: range-check difference in the column that should be increasing.
-    let range_check =
-        vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(0)];
-
     let timestamp_first_change = {
         let mut cur = builder.sub_extension(one, context_first_change);
         cur = builder.sub_extension(cur, segment_first_change);
@@ -296,36 +339,6 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
     };
     let range_check_diff = builder.sub_extension(range_check, range_check_value);
     yield_constr.constraint(builder, range_check_diff);
-
-    let diff_if_context_equal = builder.mul_extension(context_first_change, addr_segment_diff);
-    let addr_context_diff_min_one = builder.sub_extension(addr_context_diff, one);
-    let diff_if_context_unequal =
-        builder.mul_extension(not_context_first_change, addr_context_diff_min_one);
-    let sum_of_diffs_context =
-        builder.add_extension(diff_if_context_equal, diff_if_context_unequal);
-    let context_range_check_constraint =
-        builder.sub_extension(context_range_check, sum_of_diffs_context);
-    yield_constr.constraint(builder, context_range_check_constraint);
-
-    let diff_if_segment_equal = builder.mul_extension(segment_first_change, addr_virtual_diff);
-    let addr_segment_diff_min_one = builder.sub_extension(addr_segment_diff, one);
-    let diff_if_segment_unequal =
-        builder.mul_extension(not_segment_first_change, addr_segment_diff_min_one);
-    let sum_of_diffs_segment =
-        builder.add_extension(diff_if_segment_equal, diff_if_segment_unequal);
-    let segment_range_check_constraint =
-        builder.sub_extension(segment_range_check, sum_of_diffs_segment);
-    yield_constr.constraint(builder, segment_range_check_constraint);
-
-    let diff_if_virtual_equal = builder.mul_extension(virtual_first_change, timestamp_diff);
-    let addr_virtual_diff_min_one = builder.sub_extension(addr_virtual_diff, one);
-    let diff_if_virtual_unequal =
-        builder.mul_extension(not_virtual_first_change, addr_virtual_diff_min_one);
-    let sum_of_diffs_virtual =
-        builder.add_extension(diff_if_virtual_equal, diff_if_virtual_unequal);
-    let virtual_range_check_constraint =
-        builder.sub_extension(virtual_range_check, sum_of_diffs_virtual);
-    yield_constr.constraint(builder, virtual_range_check_constraint);
 
     // Enumerate purportedly-ordered log.
     for i in 0..8 {
