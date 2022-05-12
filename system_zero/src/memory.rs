@@ -212,6 +212,8 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     let context_first_change = vars.local_values[MEMORY_CONTEXT_FIRST_CHANGE];
     let segment_first_change = vars.local_values[MEMORY_SEGMENT_FIRST_CHANGE];
     let virtual_first_change = vars.local_values[MEMORY_VIRTUAL_FIRST_CHANGE];
+    let timestamp_first_change =
+        one - context_first_change - segment_first_change - virtual_first_change;
 
     let range_check =
         vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(0)];
@@ -219,21 +221,23 @@ pub(crate) fn eval_memory<F: Field, P: PackedField<Scalar = F>>(
     let not_context_first_change = one - context_first_change;
     let not_segment_first_change = one - segment_first_change;
     let not_virtual_first_change = one - virtual_first_change;
+    let not_timestamp_first_change = one - timestamp_first_change;
 
     // First set of ordering constraint: first_change flags are boolean.
     yield_constr.constraint(context_first_change * not_context_first_change);
     yield_constr.constraint(segment_first_change * not_segment_first_change);
     yield_constr.constraint(virtual_first_change * not_virtual_first_change);
+    yield_constr.constraint(timestamp_first_change * not_timestamp_first_change);
 
-    // Second set of ordering constraints: first_change flags are correct.
-    yield_constr.constraint(context_first_change * (next_addr_context - addr_context));
-    yield_constr.constraint(segment_first_change * (next_addr_segment - addr_segment));
-    yield_constr.constraint(virtual_first_change * (next_addr_virtual - addr_virtual));
+    // Second set of ordering constraints: no change before the column corresponding to the nonzero first_change flag.
+    yield_constr.constraint(segment_first_change * (next_addr_context - addr_context));
+    yield_constr.constraint(virtual_first_change * (next_addr_context - addr_context));
+    yield_constr.constraint(virtual_first_change * (next_addr_segment - addr_segment));
+    yield_constr.constraint(timestamp_first_change * (next_addr_context - addr_context));
+    yield_constr.constraint(timestamp_first_change * (next_addr_segment - addr_segment));
+    yield_constr.constraint(timestamp_first_change * (next_addr_virtual - addr_virtual));
 
     // Third set of ordering constraints: range-check difference in the column that should be increasing.
-
-    let timestamp_first_change =
-        one - context_first_change - segment_first_change - virtual_first_change;
     let range_check_value = context_first_change * (next_addr_context - addr_context - one)
         + segment_first_change * (next_addr_segment - addr_segment - one)
         + virtual_first_change * (next_addr_virtual - addr_virtual - one)
@@ -274,6 +278,11 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
     let context_first_change = vars.local_values[MEMORY_CONTEXT_FIRST_CHANGE];
     let segment_first_change = vars.local_values[MEMORY_SEGMENT_FIRST_CHANGE];
     let virtual_first_change = vars.local_values[MEMORY_VIRTUAL_FIRST_CHANGE];
+    let timestamp_first_change = {
+        let mut cur = builder.sub_extension(one, context_first_change);
+        cur = builder.sub_extension(cur, segment_first_change);
+        builder.sub_extension(cur, virtual_first_change)
+    };
 
     let range_check =
         vars.local_values[crate::registers::range_check_degree::col_rc_degree_input(0)];
@@ -281,6 +290,7 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
     let not_context_first_change = builder.sub_extension(one, context_first_change);
     let not_segment_first_change = builder.sub_extension(one, segment_first_change);
     let not_virtual_first_change = builder.sub_extension(one, virtual_first_change);
+    let not_timestamp_first_change = builder.sub_extension(one, timestamp_first_change);
     let addr_context_diff = builder.sub_extension(next_addr_context, addr_context);
     let addr_segment_diff = builder.sub_extension(next_addr_segment, addr_segment);
     let addr_virtual_diff = builder.sub_extension(next_addr_virtual, addr_virtual);
@@ -295,22 +305,25 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
     let virtual_first_change_bool =
         builder.mul_extension(virtual_first_change, not_virtual_first_change);
     yield_constr.constraint(builder, virtual_first_change_bool);
+    let timestamp_first_change_bool =
+        builder.mul_extension(timestamp_first_change, not_timestamp_first_change);
+    yield_constr.constraint(builder, timestamp_first_change_bool);
 
-    // Second set of ordering constraints: trace matches with no change in corresponding column.
-    let cond_context_diff = builder.mul_extension(context_first_change, addr_context_diff);
-    yield_constr.constraint(builder, cond_context_diff);
-    let cond_segment_diff = builder.mul_extension(segment_first_change, addr_segment_diff);
-    yield_constr.constraint(builder, cond_segment_diff);
-    let cond_virtual_diff = builder.mul_extension(virtual_first_change, addr_virtual_diff);
-    yield_constr.constraint(builder, cond_virtual_diff);
+    // Second set of ordering constraints: no change before the column corresponding to the nonzero first_change flag.
+    let segment_first_change_check = builder.mul_extension(segment_first_change, addr_context_diff);
+    yield_constr.constraint(builder, segment_first_change_check);
+    let virtual_first_change_check_1 = builder.mul_extension(virtual_first_change, addr_context_diff);
+    yield_constr.constraint(builder, virtual_first_change_check_1);
+    let virtual_first_change_check_2 = builder.mul_extension(virtual_first_change, addr_segment_diff);
+    yield_constr.constraint(builder, virtual_first_change_check_2);
+    let timestamp_first_change_check_1 = builder.mul_extension(timestamp_first_change, addr_context_diff);
+    yield_constr.constraint(builder, timestamp_first_change_check_1);
+    let timestamp_first_change_check_2 = builder.mul_extension(timestamp_first_change, addr_segment_diff);
+    yield_constr.constraint(builder, timestamp_first_change_check_2);
+    let timestamp_first_change_check_3 = builder.mul_extension(timestamp_first_change, addr_virtual_diff);
+    yield_constr.constraint(builder, timestamp_first_change_check_3);
 
     // Third set of ordering constraints: range-check difference in the column that should be increasing.
-    let timestamp_first_change = {
-        let mut cur = builder.sub_extension(one, context_first_change);
-        cur = builder.sub_extension(cur, segment_first_change);
-        builder.sub_extension(cur, virtual_first_change)
-    };
-
     let context_diff = {
         let diff = builder.sub_extension(next_addr_context, addr_context);
         builder.sub_extension(diff, one)
