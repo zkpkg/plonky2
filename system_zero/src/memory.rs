@@ -312,15 +312,20 @@ pub(crate) fn eval_memory_recursively<F: RichField + Extendable<D>, const D: usi
     // Second set of ordering constraints: no change before the column corresponding to the nonzero first_change flag.
     let segment_first_change_check = builder.mul_extension(segment_first_change, addr_context_diff);
     yield_constr.constraint(builder, segment_first_change_check);
-    let virtual_first_change_check_1 = builder.mul_extension(virtual_first_change, addr_context_diff);
+    let virtual_first_change_check_1 =
+        builder.mul_extension(virtual_first_change, addr_context_diff);
     yield_constr.constraint(builder, virtual_first_change_check_1);
-    let virtual_first_change_check_2 = builder.mul_extension(virtual_first_change, addr_segment_diff);
+    let virtual_first_change_check_2 =
+        builder.mul_extension(virtual_first_change, addr_segment_diff);
     yield_constr.constraint(builder, virtual_first_change_check_2);
-    let timestamp_first_change_check_1 = builder.mul_extension(timestamp_first_change, addr_context_diff);
+    let timestamp_first_change_check_1 =
+        builder.mul_extension(timestamp_first_change, addr_context_diff);
     yield_constr.constraint(builder, timestamp_first_change_check_1);
-    let timestamp_first_change_check_2 = builder.mul_extension(timestamp_first_change, addr_segment_diff);
+    let timestamp_first_change_check_2 =
+        builder.mul_extension(timestamp_first_change, addr_segment_diff);
     yield_constr.constraint(builder, timestamp_first_change_check_2);
-    let timestamp_first_change_check_3 = builder.mul_extension(timestamp_first_change, addr_virtual_diff);
+    let timestamp_first_change_check_3 =
+        builder.mul_extension(timestamp_first_change, addr_virtual_diff);
     yield_constr.constraint(builder, timestamp_first_change_check_3);
 
     // Third set of ordering constraints: range-check difference in the column that should be increasing.
