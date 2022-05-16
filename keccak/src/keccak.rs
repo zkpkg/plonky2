@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use log::info;
-use plonky2::field::extension_field::{FieldExtension};
+use plonky2::field::extension_field::FieldExtension;
 use plonky2::field::field_types::{Field, PrimeField64};
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::field::packed_field::PackedField;
@@ -14,10 +14,14 @@ use starky::stark::Stark;
 use starky::util::trace_rows_to_poly_values;
 use starky::vars::StarkEvaluationTargets;
 use starky::vars::StarkEvaluationVars;
-use crate::logic::{andn, andn_gen, andn_gen_circuit, xor, xor3_gen_circuit, xor_gen, xor_gen_circuit};
 
+use crate::logic::{
+    andn, andn_gen, andn_gen_circuit, xor, xor3_gen_circuit, xor_gen, xor_gen_circuit,
+};
 use crate::registers::{
-    reg_a, reg_a_prime, reg_a_prime_prime, reg_b, reg_c, reg_c_partial, NUM_REGISTERS,
+    rc_value_bit, reg_a, reg_a_prime, reg_a_prime_prime, reg_a_prime_prime_0_0_bit, reg_b, reg_c,
+    reg_c_partial, reg_step, NUM_REGISTERS, REG_A_PRIME_PRIME_PRIME_0_0_HI,
+    REG_A_PRIME_PRIME_PRIME_0_0_LO,
 };
 use crate::round_flags::{eval_round_flags, eval_round_flags_recursively};
 
@@ -119,8 +123,12 @@ impl Keccak {
                     ])
                 };
 
-                let lo = (0..32).rev().fold(F::ZERO, |acc, z| acc.double() + get_bit(z));
-                let hi = (32..64).rev().fold(F::ZERO, |acc, z| acc.double() + get_bit(z));
+                let lo = (0..32)
+                    .rev()
+                    .fold(F::ZERO, |acc, z| acc.double() + get_bit(z));
+                let hi = (32..64)
+                    .rev()
+                    .fold(F::ZERO, |acc, z| acc.double() + get_bit(z));
 
                 let reg_lo = reg_a_prime_prime(x, y);
                 let reg_hi = reg_lo + 1;
@@ -240,12 +248,54 @@ impl Stark<F, D> for Keccak {
                 let reg_hi = reg_lo + 1;
                 let lo = vars.local_values[reg_lo];
                 let hi = vars.local_values[reg_hi];
-                let computed_lo = (0..32).rev().fold(P::ZEROS, |acc, z| acc.doubles() + get_bit(z));
-                let computed_hi = (32..64).rev().fold(P::ZEROS, |acc, z| acc.doubles() + get_bit(z));
+                let computed_lo = (0..32)
+                    .rev()
+                    .fold(P::ZEROS, |acc, z| acc.doubles() + get_bit(z));
+                let computed_hi = (32..64)
+                    .rev()
+                    .fold(P::ZEROS, |acc, z| acc.doubles() + get_bit(z));
+
                 yield_constr.constraint(computed_lo - lo);
                 yield_constr.constraint(computed_hi - hi);
             }
         }
+
+        let a_prime_prime_0_0_bits: Vec<_> = (0..64)
+            .map(|i| vars.local_values[reg_a_prime_prime_0_0_bit(i)])
+            .collect();
+        let computed_a_prime_prime_0_0_lo = (0..32)
+            .rev()
+            .fold(P::ZEROS, |acc, z| acc.doubles() + a_prime_prime_0_0_bits[z]);
+        let computed_a_prime_prime_0_0_hi = (32..64)
+            .rev()
+            .fold(P::ZEROS, |acc, z| acc.doubles() + a_prime_prime_0_0_bits[z]);
+        let a_prime_prime_0_0_lo = vars.local_values[reg_a_prime_prime(0, 0)];
+        let a_prime_prime_0_0_hi = vars.local_values[reg_a_prime_prime(0, 0) + 1];
+        yield_constr.constraint(computed_a_prime_prime_0_0_lo - a_prime_prime_0_0_lo);
+        yield_constr.constraint(computed_a_prime_prime_0_0_hi - a_prime_prime_0_0_hi);
+
+        let get_xored_bit = |i| {
+            let mut rc_bit_i = P::ZEROS;
+            for r in 0..NUM_ROUNDS {
+                let this_round = vars.local_values[reg_step(r)];
+                let this_round_constant =
+                    P::from(FE::from_canonical_u32(rc_value_bit(r, i) as u32));
+                rc_bit_i += this_round * this_round_constant;
+            }
+
+            xor_gen(a_prime_prime_0_0_bits[i], rc_bit_i)
+        };
+
+        let a_prime_prime_prime_0_0_lo = vars.local_values[REG_A_PRIME_PRIME_PRIME_0_0_LO];
+        let a_prime_prime_prime_0_0_hi = vars.local_values[REG_A_PRIME_PRIME_PRIME_0_0_HI];
+        let computed_a_prime_prime_prime_0_0_lo = (0..32)
+            .rev()
+            .fold(P::ZEROS, |acc, z| acc.doubles() + get_xored_bit(z));
+        let computed_a_prime_prime_prime_0_0_hi = (32..64)
+            .rev()
+            .fold(P::ZEROS, |acc, z| acc.doubles() + get_xored_bit(z));
+        yield_constr.constraint(computed_a_prime_prime_prime_0_0_lo - a_prime_prime_prime_0_0_lo);
+        yield_constr.constraint(computed_a_prime_prime_prime_0_0_hi - a_prime_prime_prime_0_0_hi);
     }
 
     fn eval_ext_recursively(
@@ -314,11 +364,7 @@ impl Stark<F, D> for Keccak {
                         vars.local_values[reg_b((x + 1) % 5, y, z)],
                         vars.local_values[reg_b((x + 2) % 5, y, z)],
                     );
-                    xor_gen_circuit(
-                        builder,
-                        vars.local_values[reg_b(x, y, z)],
-                        andn,
-                    )
+                    xor_gen_circuit(builder, vars.local_values[reg_b(x, y, z)], andn)
                 };
 
                 let reg_lo = reg_a_prime_prime(x, y);

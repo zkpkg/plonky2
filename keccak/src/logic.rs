@@ -1,5 +1,5 @@
 use plonky2::field::extension_field::Extendable;
-use plonky2::field::field_types::{PrimeField64};
+use plonky2::field::field_types::PrimeField64;
 use plonky2::field::packed_field::PackedField;
 use plonky2::hash::hash_types::RichField;
 use plonky2::iop::ext_target::ExtensionTarget;
