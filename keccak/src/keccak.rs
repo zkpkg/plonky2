@@ -258,7 +258,7 @@ impl Stark<F, D> for Keccak {
             }
         }
 
-        // A'''[0, 0] = A''[0, 0]
+        // A'''[0, 0] = A''[0, 0] XOR RC
         let a_prime_prime_0_0_bits: Vec<_> = (0..64)
             .map(|i| vars.local_values[reg_a_prime_prime_0_0_bit(i)])
             .collect();
@@ -354,7 +354,6 @@ impl Stark<F, D> for Keccak {
         }
 
         // A''[x, y] = xor(B[x, y], andn(B[x + 1, y], B[x + 2, y])).
-        // A''[0, 0] is additionally xor'd with RC.
         for x in 0..5 {
             for y in 0..5 {
                 let mut get_bit = |z| {
@@ -380,6 +379,52 @@ impl Stark<F, D> for Keccak {
                 yield_constr.constraint(builder, diff);
             }
         }
+
+        // A'''[0, 0] = A''[0, 0] XOR RC
+        let a_prime_prime_0_0_bits: Vec<_> = (0..64)
+            .map(|i| vars.local_values[reg_a_prime_prime_0_0_bit(i)])
+            .collect();
+        let computed_a_prime_prime_0_0_lo =
+            reduce_with_powers_ext_recursive(builder, &a_prime_prime_0_0_bits[0..32], two);
+        let computed_a_prime_prime_0_0_hi =
+            reduce_with_powers_ext_recursive(builder, &a_prime_prime_0_0_bits[32..64], two);
+        let a_prime_prime_0_0_lo = vars.local_values[reg_a_prime_prime(0, 0)];
+        let a_prime_prime_0_0_hi = vars.local_values[reg_a_prime_prime(0, 0) + 1];
+        let diff = builder.sub_extension(computed_a_prime_prime_0_0_lo, a_prime_prime_0_0_lo);
+        yield_constr.constraint(builder, diff);
+        let diff = builder.sub_extension(computed_a_prime_prime_0_0_hi, a_prime_prime_0_0_hi);
+        yield_constr.constraint(builder, diff);
+
+        let mut get_xored_bit = |i| {
+            let mut rc_bit_i = builder.zero_extension();
+            for r in 0..NUM_ROUNDS {
+                let this_round = vars.local_values[reg_step(r)];
+                let this_round_constant = builder
+                    .constant_extension(F::from_canonical_u32(rc_value_bit(r, i) as u32).into());
+                rc_bit_i = builder.mul_add_extension(this_round, this_round_constant, rc_bit_i);
+            }
+
+            xor_gen_circuit(builder, a_prime_prime_0_0_bits[i], rc_bit_i)
+        };
+
+        let a_prime_prime_prime_0_0_lo = vars.local_values[reg_a_prime_prime_prime(0, 0)];
+        let a_prime_prime_prime_0_0_hi = vars.local_values[reg_a_prime_prime_prime(0, 0) + 1];
+        let bits_lo = (0..32).map(|z| get_xored_bit(z)).collect_vec();
+        let bits_hi = (32..64).map(|z| get_xored_bit(z)).collect_vec();
+        let computed_a_prime_prime_prime_0_0_lo =
+            reduce_with_powers_ext_recursive(builder, bits_lo, two);
+        let computed_a_prime_prime_prime_0_0_hi =
+            reduce_with_powers_ext_recursive(builder, bits_hi, two);
+        let diff = builder.sub_extension(
+            computed_a_prime_prime_prime_0_0_lo,
+            a_prime_prime_prime_0_0_lo,
+        );
+        yield_constr.constraint(builder, diff);
+        let diff = builder.sub_extension(
+            computed_a_prime_prime_prime_0_0_hi,
+            a_prime_prime_prime_0_0_hi,
+        );
+        yield_constr.constraint(builder, diff);
     }
 
     fn constraint_degree(&self) -> usize {
