@@ -14,6 +14,33 @@ const R: [[u8; 5]; 5] = [
     [27, 14, 8, 39, 20],
 ];
 
+const RC: [u64; 24] = [
+    0x0000000000000001,
+    0x0000000000008082,
+    0x800000000000808A,
+    0x8000000080008000,
+    0x000000000000808B,
+    0x0000000080000001,
+    0x8000000080008081,
+    0x8000000000008009,
+    0x000000000000008A,
+    0x0000000000000088,
+    0x0000000080008009,
+    0x000000008000000A,
+    0x000000008000808B,
+    0x800000000000008B,
+    0x8000000000008089,
+    0x8000000000008003,
+    0x8000000000008002,
+    0x8000000000000080,
+    0x000000000000800A,
+    0x800000008000000A,
+    0x8000000080008081,
+    0x8000000000008080,
+    0x0000000080000001,
+    0x8000000080008008,
+];
+
 const RC_BITS: [[u8; 64]; 24] = [
     [
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -137,6 +164,14 @@ const RC_BITS: [[u8; 64]; 24] = [
     ],
 ];
 
+pub(crate) const fn rc_value_bit(round: usize, bit_index: usize) -> u8 {
+    RC_BITS[round][bit_index]
+}
+
+pub(crate) const fn rc_value(round: usize) -> u64 {
+    RC[round]
+}
+
 const START_A: usize = NUM_ROUNDS;
 pub(crate) const fn reg_a(x: usize, y: usize, z: usize) -> usize {
     debug_assert!(x < 5);
@@ -201,8 +236,8 @@ pub(crate) const fn reg_a_prime_prime_0_0_bit(i: usize) -> usize {
     START_A_PRIME_PRIME_0_0_BITS + i
 }
 
-pub(crate) const REG_A_PRIME_PRIME_PRIME_0_0_LO: usize = START_A_PRIME_PRIME_0_0_BITS + 64;
-pub(crate) const REG_A_PRIME_PRIME_PRIME_0_0_HI: usize = REG_A_PRIME_PRIME_PRIME_0_0_LO + 1;
+const REG_A_PRIME_PRIME_PRIME_0_0_LO: usize = START_A_PRIME_PRIME_0_0_BITS + 64;
+const REG_A_PRIME_PRIME_PRIME_0_0_HI: usize = REG_A_PRIME_PRIME_PRIME_0_0_LO + 1;
 
 pub(crate) const fn reg_a_prime_prime_prime(x: usize, y: usize) -> usize {
     debug_assert!(x < 5);
@@ -212,10 +247,6 @@ pub(crate) const fn reg_a_prime_prime_prime(x: usize, y: usize) -> usize {
     } else {
         reg_a_prime_prime(x, y)
     }
-}
-
-pub(crate) const fn rc_value_bit(round: usize, bit_index: usize) -> u8 {
-    RC_BITS[round][bit_index]
 }
 
 pub(crate) const NUM_REGISTERS: usize = REG_A_PRIME_PRIME_PRIME_0_0_HI + 1;

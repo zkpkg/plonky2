@@ -19,9 +19,8 @@ use crate::logic::{
     andn, andn_gen, andn_gen_circuit, xor, xor3_gen_circuit, xor_gen, xor_gen_circuit,
 };
 use crate::registers::{
-    rc_value_bit, reg_a, reg_a_prime, reg_a_prime_prime, reg_a_prime_prime_0_0_bit, reg_b, reg_c,
-    reg_c_partial, reg_step, NUM_REGISTERS, REG_A_PRIME_PRIME_PRIME_0_0_HI,
-    REG_A_PRIME_PRIME_PRIME_0_0_LO,
+    rc_value, rc_value_bit, reg_a, reg_a_prime, reg_a_prime_prime, reg_a_prime_prime_0_0_bit,
+    reg_a_prime_prime_prime, reg_b, reg_c, reg_c_partial, reg_step, NUM_REGISTERS,
 };
 use crate::round_flags::{eval_round_flags, eval_round_flags_recursively};
 
@@ -140,8 +139,8 @@ impl Keccak {
         // A''[0, 0] is additionally xor'd with RC.
         let reg_lo = reg_a_prime_prime(0, 0);
         let reg_hi = reg_lo + 1;
-        let rc_lo = 0; // TODO
-        let rc_hi = 0; // TODO
+        let rc_lo = rc_value(round) % (1 << 32);
+        let rc_hi = rc_value(round) >> 32;
         row[reg_lo] = F::from_canonical_u64(row[reg_lo].to_canonical_u64() ^ rc_lo);
         row[reg_hi] = F::from_canonical_u64(row[reg_hi].to_canonical_u64() ^ rc_hi);
     }
@@ -231,7 +230,6 @@ impl Stark<F, D> for Keccak {
         }
 
         // A''[x, y] = xor(B[x, y], andn(B[x + 1, y], B[x + 2, y])).
-        // A''[0, 0] is additionally xor'd with RC.
         for x in 0..5 {
             for y in 0..5 {
                 let get_bit = |z| {
@@ -260,6 +258,7 @@ impl Stark<F, D> for Keccak {
             }
         }
 
+        // A'''[0, 0] = A''[0, 0]
         let a_prime_prime_0_0_bits: Vec<_> = (0..64)
             .map(|i| vars.local_values[reg_a_prime_prime_0_0_bit(i)])
             .collect();
@@ -286,8 +285,8 @@ impl Stark<F, D> for Keccak {
             xor_gen(a_prime_prime_0_0_bits[i], rc_bit_i)
         };
 
-        let a_prime_prime_prime_0_0_lo = vars.local_values[REG_A_PRIME_PRIME_PRIME_0_0_LO];
-        let a_prime_prime_prime_0_0_hi = vars.local_values[REG_A_PRIME_PRIME_PRIME_0_0_HI];
+        let a_prime_prime_prime_0_0_lo = vars.local_values[reg_a_prime_prime_prime(0, 0)];
+        let a_prime_prime_prime_0_0_hi = vars.local_values[reg_a_prime_prime_prime(0, 0) + 1];
         let computed_a_prime_prime_prime_0_0_lo = (0..32)
             .rev()
             .fold(P::ZEROS, |acc, z| acc.doubles() + get_xored_bit(z));
