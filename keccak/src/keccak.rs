@@ -193,8 +193,7 @@ impl Stark<F, D> for Keccak {
                 let a_0 = vars.local_values[reg_a(x, 0, z)];
                 let a_1 = vars.local_values[reg_a(x, 1, z)];
                 let a_2 = vars.local_values[reg_a(x, 2, z)];
-                let xor_01 = xor_gen(a_0, a_1);
-                let xor_012 = xor_gen(xor_01, a_2);
+                let xor_012 = xor3_gen(a_0, a_1, a_2);
                 yield_constr.constraint(c_partial - xor_012);
             }
         }
@@ -206,8 +205,7 @@ impl Stark<F, D> for Keccak {
                 let xor_012 = vars.local_values[reg_c_partial(x, z)];
                 let a_3 = vars.local_values[reg_a(x, 3, z)];
                 let a_4 = vars.local_values[reg_a(x, 4, z)];
-                let xor_0123 = xor_gen(xor_012, a_3);
-                let xor_01234 = xor_gen(xor_0123, a_4);
+                let xor_01234 = xor3_gen(xor_012, a_3, a_4);
                 yield_constr.constraint(c - xor_01234);
             }
         }
