@@ -204,6 +204,16 @@ pub(crate) const fn reg_a_prime_prime_0_0_bit(i: usize) -> usize {
 pub(crate) const REG_A_PRIME_PRIME_PRIME_0_0_LO: usize = START_A_PRIME_PRIME_0_0_BITS + 64;
 pub(crate) const REG_A_PRIME_PRIME_PRIME_0_0_HI: usize = REG_A_PRIME_PRIME_PRIME_0_0_LO + 1;
 
+pub(crate) const fn reg_a_prime_prime_prime(x: usize, y: usize) -> usize {
+    debug_assert!(x < 5);
+    debug_assert!(y < 5);
+    if x == 0 && y == 0 {
+        REG_A_PRIME_PRIME_PRIME_0_0_LO
+    } else {
+        reg_a_prime_prime(x, y)
+    }
+}
+
 pub(crate) const fn rc_value_bit(round: usize, bit_index: usize) -> u8 {
     RC_BITS[round][bit_index]
 }
