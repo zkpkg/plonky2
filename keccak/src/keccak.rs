@@ -259,9 +259,9 @@ impl Stark<F, D> for Keccak {
         }
 
         // A'''[0, 0] = A''[0, 0] XOR RC
-        let a_prime_prime_0_0_bits: Vec<_> = (0..64)
+        let a_prime_prime_0_0_bits = (0..64)
             .map(|i| vars.local_values[reg_a_prime_prime_0_0_bit(i)])
-            .collect();
+            .collect_vec();
         let computed_a_prime_prime_0_0_lo = (0..32)
             .rev()
             .fold(P::ZEROS, |acc, z| acc.doubles() + a_prime_prime_0_0_bits[z]);
@@ -295,6 +295,20 @@ impl Stark<F, D> for Keccak {
             .fold(P::ZEROS, |acc, z| acc.doubles() + get_xored_bit(z));
         yield_constr.constraint(computed_a_prime_prime_prime_0_0_lo - a_prime_prime_prime_0_0_lo);
         yield_constr.constraint(computed_a_prime_prime_prime_0_0_hi - a_prime_prime_prime_0_0_hi);
+
+        // Enforce that this round's output equals the next round's input.
+        for x in 0..5 {
+            for y in 0..5 {
+                let output = vars.local_values[reg_a_prime_prime_prime(x, y)];
+                let input_bits = (0..64)
+                    .map(|z| vars.next_values[reg_a(x, y, z)])
+                    .collect_vec();
+                let input_bits_combined = (0..64)
+                    .rev()
+                    .fold(P::ZEROS, |acc, z| acc.doubles() + input_bits[z]);
+                yield_constr.constraint(output - input_bits_combined);
+            }
+        }
     }
 
     fn eval_ext_recursively(
@@ -381,9 +395,9 @@ impl Stark<F, D> for Keccak {
         }
 
         // A'''[0, 0] = A''[0, 0] XOR RC
-        let a_prime_prime_0_0_bits: Vec<_> = (0..64)
+        let a_prime_prime_0_0_bits = (0..64)
             .map(|i| vars.local_values[reg_a_prime_prime_0_0_bit(i)])
-            .collect();
+            .collect_vec();
         let computed_a_prime_prime_0_0_lo =
             reduce_with_powers_ext_recursive(builder, &a_prime_prime_0_0_bits[0..32], two);
         let computed_a_prime_prime_0_0_hi =
@@ -425,6 +439,20 @@ impl Stark<F, D> for Keccak {
             a_prime_prime_prime_0_0_hi,
         );
         yield_constr.constraint(builder, diff);
+
+        // Enforce that this round's output equals the next round's input.
+        for x in 0..5 {
+            for y in 0..5 {
+                let output = vars.local_values[reg_a_prime_prime_prime(x, y)];
+                let input_bits = (0..64)
+                    .map(|z| vars.next_values[reg_a(x, y, z)])
+                    .collect_vec();
+                let input_bits_combined =
+                    reduce_with_powers_ext_recursive(builder, input_bits, two);
+                let diff = builder.sub_extension(output, input_bits_combined);
+                yield_constr.constraint(builder, diff);
+            }
+        }
     }
 
     fn constraint_degree(&self) -> usize {
