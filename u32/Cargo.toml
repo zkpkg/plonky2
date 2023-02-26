@@ -13,5 +13,5 @@ num = { version = "0.4", default-features = false }
 plonky2 = { git = "https://github.com/zkpkg/plonky2", rev = "5aafbaad491b89805b649650131ab80ee8c79605" }
 
 [dev-dependencies]
-plonky2 = { version = "0.1.2", default-features = false, features = ["gate_testing"] }
+plonky2 = { git = "https://github.com/zkpkg/plonky2", rev = "5aafbaad491b89805b649650131ab80ee8c79605", default-features = false, features = ["gate_testing"] }
 rand = { version = "0.8.4", default-features = false, features = ["getrandom"] }
